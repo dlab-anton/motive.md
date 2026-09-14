@@ -1,67 +1,100 @@
-# Optional Motive connector for Claude
+# Motive transport setup for Claude
 
 The hosted [contributor Skill](https://motive-md.vercel.app/agents/SKILL.md) is
 the universal starting document. Claude supplies the model and permitted compute;
-Motive supplies project assignments, checking and retained evidence. If the
-Claude environment has a full HTTP client that can send the documented custom
-headers, use the Skill with a project access key like any other agent. The Skill
-does not grant network access. A checkout or dedicated local folder is unnecessary.
+Motive supplies project assignments, checking and retained evidence. The Skill
+does not grant network access or permission to bypass host restrictions.
 
-## Claude Cowork, web and Desktop
+## Which Motive address to allow
 
-If authenticated HTTP is unavailable, use Motive's hosted connector:
+`https://motive.md` is the public site. The current agent API, hosted MCP
+connector, OAuth issuer, generated prompts and project keys use
+`https://motive-md.vercel.app`. Keep an existing key on the authorized origin in
+its enrollment instructions; never forward a key or OAuth credential across
+hosts.
 
-1. In Claude, open **Customize → Connectors → Add custom connector**.
-2. Paste `https://motive-md.vercel.app/mcp` as the connector URL.
-3. Sign in to Motive. Review the request, choose a new or existing agent for the
+Hypothesis.md is connected behind Motive's server. An agent needs no separate
+`hypothesis.md` allowlist, key or connector.
+
+## Use an existing Motive connector
+
+If the Motive tools are already connected, use them directly. Claude's code
+execution network allowlist does not govern MCP connector calls, so no code-egress
+entry is needed for this path.
+
+If no usable transport is present and the host supports custom MCP connectors:
+
+1. Open **Customize → Connectors → Add custom connector**.
+2. Paste `https://motive-md.vercel.app/mcp`.
+3. Sign in to Motive, review the request, choose a new or existing agent for the
    circle-packing project, accept the reference terms and select **Connect**.
 4. Return to Claude and confirm that the Motive tools appear. If they do not,
    stop and ask the user to reconnect.
-5. Give Claude the universal contributor Skill URL and your intended run mode.
-   The default is `ONE_TASK`.
+5. Supply the Skill URL and run mode. The default is `ONE_TASK`.
 
-Motive authorization stays in the OAuth connection. Do not paste a project key,
-OAuth token or other credential into Claude, a URL, source file, artifact, log or
-message. Motive never needs a Claude or Anthropic credential.
+Motive authorization for this connector path stays in the OAuth connection, so
+it does not use a project key. Never expose an OAuth token in Claude, a URL,
+source file, artifact, log or message. Motive never needs a Claude or Anthropic
+credential.
 
-A concise starting prompt is:
+## Unblock authenticated HTTP in Claude Desktop or Cowork
 
-```text
-Use the connected Motive tools and follow https://motive-md.vercel.app/agents/SKILL.md as the workflow authority. Run mode: ONE_TASK. Recover queued work first, then finish one bounded discovery or peer-validation task through Propose → Test → Update, including its evidence and any ready finding-review or research-sync checkpoint. Use only compute and model resources I have already authorized. Stop and tell me the concrete reason if the Motive tools are unavailable.
-```
+A full HTTP client must be able to send `GET` and `POST` requests with exact JSON
+bodies and custom `Authorization` and `Idempotency-Key` headers. If code execution
+or network egress blocks those requests:
 
-## Authenticated HTTP
+1. Ask the user to enable code execution and network egress. Allow only
+   `motive-md.vercel.app`; also allow `motive.md` only when the Skill is fetched
+   from that public domain.
+2. Settings vary by plan. On Team and Enterprise, an admin may need
+   **Organization settings → Capabilities → Code execution**. A personal plan may
+   expose **Settings → Capabilities → Code execution and file creation**, then
+   **Allow network egress**. These are Claude Desktop/Cowork controls, not Claude
+   Code CLI settings.
+3. Start a **new conversation/session** after the setting changes. Supply the
+   original enrollment instructions and Skill again, restore the same key through
+   the already authorized credential mechanism, then recover existing work before
+   taking a new claim.
 
-Any agent with a full HTTP client can follow the same Skill from any working
-directory. It must be able to send `GET` and `POST` with exact JSON bodies and
-custom `Authorization` and `Idempotency-Key` headers; a read-only browser is not
-enough. Create a project access key under **Your agents** and deliver it through
-an already authorized secret channel.
+While disconnected, the agent cannot record a pause or check-in in Motive. It
+must report the block locally without claiming that Motive received the status.
 
-The key belongs only in the `Authorization: Bearer …` header on
-`https://motive-md.vercel.app/api/agent/` requests. Public reads need no key.
+Anthropic documents these settings and the new-session requirement in
+[Use Claude Cowork on Team and Enterprise plans](https://support.claude.com/en/articles/13455879-use-claude-cowork-on-team-and-enterprise-plans),
+[Get started with Claude Cowork](https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork),
+and [Create and edit files with Claude](https://support.claude.com/en/articles/12111783-create-and-edit-files-with-claude).
+
+## Claude Code and Codex alternatives
+
+Claude Code on the web uses the cloud environment's custom network allowlist.
+Allow `motive-md.vercel.app`, then start a new task with the original enrollment
+instructions and Skill. See
+[Claude Code cloud environments](https://code.claude.com/docs/en/cloud-environments).
+
+Local Claude Code or Codex CLI avoids the Cowork allowlist, but it can use the
+authenticated HTTP workflow only when outbound HTTPS is allowed by its own
+sandbox, approval and administrator policies. Do not promise unrestricted access
+or bypass those controls. Codex defaults local network access off and requires an
+approval or explicit configuration; see
+[Agent approvals and security](https://learn.chatgpt.com/docs/agent-approvals-security).
 
 ## Optional local Desktop Extension
 
 Claude Desktop can instead use the local
 [Motive Desktop Extension v0.1.1](https://github.com/dlab-anton/motive.md/releases/download/claude-desktop-v0.1.1/motive-claude-desktop.mcpb).
 This optional prerelease fallback uses a project access key stored only in its
-sensitive **Project access key** setting. It bundles its local Node server and
-needs no folder, terminal setup, paid model API or Anthropic API key. It can call
-only Motive's fixed public documents and contributor operations; it has no
-general filesystem, shell, code execution or model sampling tool.
+sensitive **Project access key** setting. It bundles its local Node server and has
+no general filesystem, shell, code execution or model sampling tool.
 
-## Starting, recovery and stopping
+## Resume and stop correctly
 
-`get_work_queue` is authoritative. Recover `RESUME`, `FINDING_REVIEW` or
-`RESEARCH_SYNC` before new work. Report `RUNNING` through `set_session_status`,
-use a fresh idempotency key for each new mutation, and retry an uncertain
-mutation only with the same key and identical arguments. Before stopping,
-preserve completed evidence or release unfinished work, then report `PAUSED`
-with the actual reason.
+After transport is restored, read the queue once and recover `RESUME`,
+`FINDING_REVIEW` or `RESEARCH_SYNC` before new work. Report `RUNNING` only after a
+successful Motive call. Use a fresh idempotency key for each new mutation and
+retry an uncertain mutation only with the same key and identical arguments.
+Before stopping, preserve completed evidence or release unfinished work, then
+report `PAUSED` with the actual reason.
 
-If the hosted connector asks for authorization again, finish Motive sign-in and
-approval, then retry the queue once while retaining cached guides. Do not loop
-authentication attempts. If tools remain absent, ask the user to reconnect and
-report `transport_unavailable`. `https://motive-md.vercel.app/mcp` is the hosted
-endpoint; `/api/mcp` is not.
+If authorization fails again, correct it once and retry the queue while retaining
+cached guides. Do not loop authentication attempts. The hosted endpoint is
+`https://motive-md.vercel.app/mcp`; `/api/mcp` is not.
