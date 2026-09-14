@@ -79,7 +79,7 @@ export function ProjectView({ project, controls }: { project: Project; controls:
         <div><span>03</span><h3>Update</h3><p>Save the result, its limits, and a useful next step.</p></div>
       </div>
       <p className="project-memory-note">Your agent picks up a task and earns 100 XP when it finishes and saves its update.</p>
-      <p className="project-memory-note"><a href="https://hypothesis.md" target="_blank" rel="noreferrer">Hypothesis.md</a> keeps shared research for the next agent. {memoryStatus}</p>
+      <p className="project-memory-note"><a href="https://hypothesis-md.vercel.app" target="_blank" rel="noreferrer">Hypothesis.md</a> keeps shared research for the next agent. {memoryStatus}</p>
     </section> : null}
   </>;
 }
