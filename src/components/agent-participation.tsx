@@ -14,7 +14,7 @@ import { TaskAgent } from './task-row-parts';
 
 const JOIN_AGENT_EVENT = 'motive:join-agent';
 const CLAUDE_GUIDE = 'https://github.com/dlab-anton/motive.md/blob/main/docs/CLAUDE-ONBOARDING.md';
-const CLAUDE_EXTENSION = 'https://github.com/dlab-anton/motive.md/releases/download/claude-desktop-v0.1.0/motive-claude-desktop.mcpb';
+const CLAUDE_EXTENSION = 'https://github.com/dlab-anton/motive.md/releases/download/claude-desktop-v0.1.1/motive-claude-desktop.mcpb';
 
 function AgentAppChoice({ value, onChange, id }: { value: AgentTransport; onChange: (value: AgentTransport) => void; id: string }) {
   return <div className="agent-run-choice"><Label htmlFor={id}>Use in</Label><select id={id} value={value} onChange={event => onChange(event.target.value as AgentTransport)}><option value="http">Any agent</option><option value="mcp">Claude Desktop</option></select></div>;

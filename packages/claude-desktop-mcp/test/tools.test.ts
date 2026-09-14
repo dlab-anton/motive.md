@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { MotiveClient } from '../src/client.js';
-import { registerMotiveTools } from '../src/tools.js';
+import { formatToolResult, registerMotiveTools } from '../src/tools.js';
 
 const KEY = `motive_agent_${'a'.repeat(32)}_${'b'.repeat(43)}`;
 const UUID = '12345678-1234-4123-8123-123456789abc';
@@ -57,4 +57,13 @@ test('structured protocol matching is advertised read-only and maps to its sole 
   assert.equal(request?.path, '/api/agent/experiment-protocol-matches');
   assert.equal(request?.readOnlyPost, true);
   assert.equal(request?.idempotencyKey, undefined);
+});
+
+test('emits raw evidence text without JSON quoting or whitespace changes', () => {
+  const exact = '{\r\n  "trial": 9007199254740993\r\n}\r\n';
+  const result = formatToolResult(exact);
+  assert.equal(result.content.length, 1);
+  assert.equal(result.content[0]?.type, 'text');
+  if (result.content[0]?.type !== 'text') assert.fail('Expected text content.');
+  assert.equal(result.content[0].text, exact);
 });

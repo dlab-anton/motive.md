@@ -128,7 +128,7 @@ async function boundedText(response: Response): Promise<string> {
   if (declared && Number(declared) > MAX_RESPONSE_BYTES) throw new MotiveClientError('Motive returned a response larger than the extension limit.');
   if (!response.body) return '';
   const reader = response.body.getReader();
-  const decoder = new TextDecoder();
+  const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
   let total = 0;
   let text = '';
   while (true) {
@@ -142,6 +142,14 @@ async function boundedText(response: Response): Promise<string> {
     text += decoder.decode(chunk.value, { stream: true });
   }
   return text + decoder.decode();
+}
+
+function isExactPublicDocument(path: string): boolean {
+  return /\.(?:md|txt)$/.test(path)
+    || path === '/agents/circle-packing.json'
+    || path === '/projects/circle-packing/reference-witness.json'
+    || path === '/projects/circle-packing/reference-provenance.json'
+    || /^\/api\/public\/projects\/circle-packing\/submissions\/[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\/artifact$/.test(path);
 }
 
 function safeApiError(status: number, responseBody: string, retryAfter: string | null): MotiveClientError {
@@ -225,10 +233,15 @@ export class MotiveClient {
       throw new MotiveClientError(`The Motive request outcome is uncertain after HTTP ${response.status}. Retry this same tool with the same idempotencyKey and identical arguments.`, true);
     }
     if (!response.ok) throw safeApiError(response.status, responseBody, response.headers.get('retry-after'));
+    if (authority === 'public' && isExactPublicDocument(request.path)) {
+      if (responseBody.includes(this.projectKey)) {
+        throw new MotiveClientError('Motive returned a public document containing the configured project key. The extension refused to expose it.');
+      }
+      return responseBody;
+    }
     try {
       return sanitize(JSON.parse(responseBody), this.projectKey);
     } catch {
-      if (authority === 'public' && /\.(?:md|txt)$/.test(request.path)) return scrubText(responseBody, this.projectKey);
       if (mutation) {
         throw new MotiveClientError('The Motive request outcome is uncertain because its success response was invalid. Retry this same tool with the same idempotencyKey and identical arguments.', true);
       }

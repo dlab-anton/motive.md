@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "motive-circle-packing",
   "display_name": "Motive: Circle Packing",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Contribute bounded circle-packing experiments to Motive from Claude Desktop.",
   "long_description": "Connect Claude Desktop to Motive's Propose → Test → Update workflow. The extension sends requests only to the fixed Motive contributor API and never runs a paid model or arbitrary code.",
   "author": {

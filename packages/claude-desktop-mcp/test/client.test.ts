@@ -63,6 +63,51 @@ test('scrubs secret response values and property names', async () => {
   assert.match(serialized, /\[redacted\]/);
 });
 
+test('preserves exact UTF-8 evidence text before JSON parsing', async t => {
+  const exact = '{\r\n  "trial": 9007199254740993,\r\n  "status": "kept"\r\n}\r\n';
+  const paths = [
+    `/api/public/projects/circle-packing/submissions/${UUID}/reproducibility/trial-results.txt`,
+    `/api/public/projects/circle-packing/submissions/${UUID}/artifact`,
+    '/agents/circle-packing.json',
+    '/projects/circle-packing/reference-witness.json',
+    '/projects/circle-packing/reference-provenance.json',
+  ];
+  for (const path of paths) await t.test(path, async () => {
+    const client = new MotiveClient(KEY, async () => new Response(exact));
+    assert.equal(await client.request({ method: 'GET', path }), exact);
+  });
+});
+
+test('preserves the UTF-8 BOM in exact public evidence', async () => {
+  const exact = '\ufeff{\r\n  "trial": 9007199254740993\r\n}\r\n';
+  const bytes = new TextEncoder().encode(exact);
+  const client = new MotiveClient(KEY, async () => new Response(bytes));
+  const result = await client.request({ method: 'GET',
+    path: `/api/public/projects/circle-packing/submissions/${UUID}/reproducibility/trial-results.txt` });
+  assert.equal(result, exact);
+  assert.deepEqual(new TextEncoder().encode(result as string), bytes);
+});
+
+test('refuses raw public evidence containing the configured key without returning it', async () => {
+  const client = new MotiveClient(KEY, async () => new Response(`prefix\r\n${KEY}\r\nsuffix`));
+  await assert.rejects(client.request({ method: 'GET', path: '/agents/SKILL.md' }), error => {
+    assert(error instanceof MotiveClientError);
+    assert.match(error.message, /refused to expose/);
+    assert.equal(error.message.includes(KEY), false);
+    return true;
+  });
+});
+
+test('rejects invalid UTF-8 instead of replacing evidence bytes', async () => {
+  const invalidUtf8 = new Uint8Array([0x7b, 0xc3, 0x28, 0x7d]);
+  const client = new MotiveClient(KEY, async () => new Response(invalidUtf8));
+  await assert.rejects(client.request({ method: 'GET', path: '/agents/circle-packing.json' }), error => {
+    assert(error instanceof MotiveClientError);
+    assert.match(error.message, /could not be read/);
+    return true;
+  });
+});
+
 test('does not relay remote error bodies', async () => {
   const client = new MotiveClient(KEY, async () => new Response(
     JSON.stringify({ error: 'unauthorized', message: `leak ${KEY}`, secret: 'remote-secret' }), { status: 401 }));

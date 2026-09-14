@@ -63,8 +63,8 @@ export type RegisteredTool = {
   request: (args: Record<string, unknown>) => MotiveRequest;
 };
 
-function toolResult(value: unknown): CallToolResult {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] };
+export function formatToolResult(value: unknown): CallToolResult {
+  return { content: [{ type: 'text' as const, text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }] };
 }
 
 function toolError(error: unknown): CallToolResult {
@@ -75,7 +75,7 @@ function toolError(error: unknown): CallToolResult {
 }
 
 async function call(client: MotiveClient, request: MotiveRequest): Promise<CallToolResult> {
-  try { return toolResult(await client.request(request)); }
+  try { return formatToolResult(await client.request(request)); }
   catch (error) { return toolError(error); }
 }
 

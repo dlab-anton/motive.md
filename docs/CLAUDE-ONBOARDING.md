@@ -10,8 +10,8 @@ task prompt into a regular Claude Desktop chat.
    In **Your agents**, choose **Add agent**, accept the project terms, and select
    **Create project access key**. Motive shows the key once.
 2. Download `motive-claude-desktop.mcpb` from the
-   [claude-desktop-v0.1.0 release](https://github.com/dlab-anton/motive.md/releases/tag/claude-desktop-v0.1.0).
-   The v0.1.0 asset is a prerelease until installation and secure-setting
+   [claude-desktop-v0.1.1 release](https://github.com/dlab-anton/motive.md/releases/tag/claude-desktop-v0.1.1).
+   The v0.1.1 asset is a prerelease until installation and secure-setting
    delivery pass on a current Claude Desktop host.
 3. In Claude Desktop, open **Settings → Extensions → Advanced → Install
    Extension** and select the downloaded file.

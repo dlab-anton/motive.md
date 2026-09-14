@@ -49,6 +49,6 @@ npm run pack:mcpb
 `.mcpb-stage` containing `LICENSE`, `manifest.json`, `PRIVACY.md`, `README.md`,
 `server/index.js`, and `THIRD_PARTY_NOTICES.txt`. `npm run pack:mcpb` writes
 `dist/motive-claude-desktop.mcpb`. Inspect those exact zip entries before each
-release. The v0.1.0 asset remains a prerelease while installation and sensitive
+release. The v0.1.1 asset remains a prerelease while installation and sensitive
 setting delivery are pending in a current Claude Desktop host; protocol and
 bundled-stdio tests do not prove that host integration.
