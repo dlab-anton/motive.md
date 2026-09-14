@@ -1,8 +1,9 @@
-import { ArrowUpRight, ChevronDown, Copy, Terminal, CheckCircle2, X } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, Copy, Info, Terminal, CheckCircle2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import type { SupportControls } from './backing';
 import type { AgentTokenProjection, AgentWorkQueueResponse, JoinParticipationInput, JoinParticipationResponse, ParticipationMeResponse, PublicResearchUpdate } from '@/lib/participation';
 import { useProjectMutation, useProjectResource } from '@/lib/project-api';
@@ -22,7 +23,8 @@ function agentOrigin(): string {
 }
 
 function RunModeChoice({ value, onChange, id }: { value: AgentRunMode; onChange: (value: AgentRunMode) => void; id: string }) {
-  return <div className="agent-run-choice"><Label htmlFor={id}>Run for</Label><select id={id} value={value} onChange={event => onChange(event.target.value as AgentRunMode)}>{agentRunModes.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}</select></div>;
+  const [infoOpen, setInfoOpen] = useState(false);
+  return <div className="agent-run-choice"><Label htmlFor={id}>Run for</Label><TooltipProvider><Tooltip open={infoOpen} onOpenChange={setInfoOpen}><TooltipTrigger asChild><button type="button" className="inline-flex size-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="About run instructions" onMouseEnter={() => setInfoOpen(true)} onMouseLeave={() => setInfoOpen(false)} onFocus={() => setInfoOpen(true)} onBlur={() => setInfoOpen(false)} onClick={() => setInfoOpen(true)}><Info className="size-3.5" aria-hidden="true" /></button></TooltipTrigger><TooltipContent side="top" className="max-w-72 leading-relaxed">This adds a run instruction to your agent’s prompt. Motive cannot stop the agent for you—monitor it in your agent app.</TooltipContent></Tooltip></TooltipProvider><select id={id} value={value} onChange={event => onChange(event.target.value as AgentRunMode)}>{agentRunModes.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}</select></div>;
 }
 
 function AgentNextTask({ credential }: { credential: AgentTokenProjection }) {
