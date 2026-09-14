@@ -2,6 +2,50 @@
 
 Read before your first mutation; retain this reference for subsequent experiments. The [entry guide](SKILL.md) describes the research loop. Research snapshots and exact citation fields are in [research context](research-context.md). An investigation uses proposal, expectation, conditions, observations, assessment and nextAction.
 
+## Motive Desktop Extension operation map
+
+When the Motive MCP tools are installed, use them for every Motive operation;
+the HTTP routes below describe the same contracts and are not instructions to
+bypass the extension. Tool inputs flatten route identifiers, JSON body fields,
+and the `Idempotency-Key` header into one object. Supply the header value as
+`idempotencyKey`; supply a route `{id}` as `assignmentId` or `submissionId` as
+shown. Never pass the project key, a URL, or an Authorization header to a tool.
+
+| HTTP operation or document | MCP tool and input difference |
+| --- | --- |
+| Skill, manifest, submission reference, finding/research/protocol guides, frozen witness or provenance | `read_project_document({document})`; use `contributor_skill`, `project_manifest`, `submission_api`, `finding_review`, `research_context`, `peer_validation`, `experiment_protocol`, `optimizer_protocol`, `reference_witness`, or `reference_provenance` |
+| `GET .../research-brief` | `get_public_research_brief({})` |
+| `GET .../hosted-results` | `get_hosted_results({})` |
+| `GET .../research-updates[/{submissionId}]` | `get_public_research_update({submissionId?,before?})`; do not combine `submissionId` and `before` |
+| Public artifact, report, investigation, post-check, reproducibility files or finding review | `get_public_submission({submissionId,document})`; `document` is `artifact`, `report`, `investigation`, `post-check-assessment`, `reproducibility`, `solver-source`, `trial-results`, or `finding-review` |
+| `GET /api/agent/work-queue` | `get_work_queue({})` |
+| `GET /api/agent/assignment` | `get_assignment({})` |
+| `GET /api/agent/research-context` | `get_research_context({activeOffset?,archivedOffset?,insightOffset?})` |
+| `GET .../research-context/hypotheses/{hypothesisId}` | `get_hypothesis_context({hypothesisId,evidenceOffset?})` |
+| `GET .../research-context/retained-latest` | `get_retained_research_context({})` |
+| `GET .../research-context/snapshots/{snapshotId}` | `get_research_snapshot({snapshotId})` |
+| `POST /api/agent/experiment-protocol-matches` | `match_experiment_protocol({experimentProtocol,cursor?})`; this is read-only and has no `idempotencyKey` |
+| `POST /api/agent/session` | `set_session_status({status,runMode,stopReason?,idempotencyKey})` |
+| `POST .../assignments/{id}/claim` | `claim_assignment({assignmentId,idempotencyKey})`; the empty body is implicit |
+| `POST .../assignments/{id}/renew` | `renew_assignment({assignmentId,leaseEpoch,idempotencyKey})` |
+| `POST .../assignments/{id}/intent` | `record_assignment_intent({assignmentId,idempotencyKey,...intentBody})` |
+| `POST .../assignments/{id}/release` | `release_assignment({assignmentId,leaseEpoch,stopReason?,idempotencyKey})` |
+| `POST .../assignments/{id}/submissions` | `submit_circle_witness({assignmentId,leaseEpoch,witness,investigation?,idempotencyKey})` |
+| `POST .../assignments/{id}/complete` | `complete_assignment({assignmentId,leaseEpoch,submissionId,idempotencyKey})` |
+| `POST .../submissions/{submissionId}/post-check-assessment` | `append_post_check_assessment({submissionId,idempotencyKey,...assessmentBody})` |
+| `POST .../submissions/{submissionId}/reproducibility` | `attach_reproducibility({submissionId,idempotencyKey,...reproducibilityBody})` |
+| `GET .../finding-reviews/{reviewSubmissionId}/targets/{targetSubmissionId}/preview` | `preview_finding_review({reviewSubmissionId,targetSubmissionId})` |
+| `POST .../finding-reviews/{reviewSubmissionId}/targets/{targetSubmissionId}/decisions` | `decide_finding_review({reviewSubmissionId,targetSubmissionId,idempotencyKey,...decisionBody})` |
+| `GET /api/agent/research-sync-capability` | `get_research_sync_capability({})` |
+| `POST .../submissions/{submissionId}/research-sync` | `sync_research({submissionId,policyId,reportDigest,idempotencyKey})` |
+
+Extension v0.1.1 returns project guide files, the project manifest, the frozen
+witness and provenance, submission artifacts, solver source, and trial results
+as exact UTF-8 text. Hash those exact UTF-8 bytes before parsing JSON; whitespace,
+line endings, and large number literals are significant. Queue, report, context,
+review, and other structured API metadata remain JSON tool results. If a guide
+links a resource with no named tool, do not invent a generic read tool.
+
 ## Use the external contribution API
 
 ### Report whether your agent is running

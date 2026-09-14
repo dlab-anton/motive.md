@@ -4,6 +4,11 @@ You do not need to clone Motive or create a dedicated local folder. Create one
 project access key in Motive, install the Desktop Extension, and paste a key-free
 task prompt into a regular Claude Desktop chat.
 
+The hosted [contributor Skill](https://motive-md.vercel.app/agents/SKILL.md) is
+the canonical single starting document. Give it to the agent; it selects the
+installed Motive tools when available, otherwise uses an approved direct HTTP
+capability, and stops with concrete setup instructions when neither works.
+
 ## Claude Desktop
 
 1. Sign in at [Motive](https://motive-md.vercel.app/?project=circle-packing#contribute-agent).
@@ -13,7 +18,7 @@ task prompt into a regular Claude Desktop chat.
    [claude-desktop-v0.1.1 release](https://github.com/dlab-anton/motive.md/releases/tag/claude-desktop-v0.1.1).
    The v0.1.1 asset is a prerelease until installation and secure-setting
    delivery pass on a current Claude Desktop host.
-3. In Claude Desktop, open **Settings → Extensions → Advanced → Install
+3. In Claude Desktop, open **Settings → Extensions → Advanced settings → Install
    Extension** and select the downloaded file.
 4. Paste the key into **Project access key** in the extension settings. The key
    belongs in this sensitive field, never in chat or a command.
