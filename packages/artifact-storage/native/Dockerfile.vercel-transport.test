@@ -1,0 +1,23 @@
+FROM motive-native-collector:local-test AS build
+USER root
+COPY collector-launcher.c /src/collector-launcher.c
+RUN gcc -std=c17 -Wall -Wextra -Werror -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie -Wl,-z,relro,-z,now \
+  -o /artifact-collector-launcher /src/collector-launcher.c
+
+FROM motive-native-collector:local-test
+LABEL motive.purpose=vercel-native-artifact-transport-local-test
+USER root
+COPY --from=build /artifact-collector-launcher /opt/motive/bin/artifact-collector-launcher
+COPY --from=build /opt/motive/collector /opt/motive/bin/artifact-collector
+COPY test_vercel_launcher.py /opt/motive/test_vercel_launcher.py
+RUN groupadd --gid 2000 motive-worker \
+ && useradd --uid 2000 --gid 2000 --no-create-home --shell /usr/sbin/nologin motive-worker \
+ && mkdir -p /opt/motive/bin /var/lib/motive/control /vercel/sandbox/workspace \
+ && printf '\000\377native-artifact\n' > /vercel/sandbox/workspace/Solution.bin \
+ && chown root:root /opt /opt/motive /opt/motive/bin /opt/motive/bin/artifact-collector /opt/motive/bin/artifact-collector-launcher /var /var/lib /var/lib/motive /var/lib/motive/control \
+ && chown -R 2000:2000 /vercel/sandbox/workspace \
+ && chmod 0755 /opt /opt/motive /var /var/lib /var/lib/motive \
+ && chmod 0555 /opt/motive/bin /opt/motive/bin/artifact-collector /opt/motive/bin/artifact-collector-launcher \
+ && chmod 0755 /var/lib/motive/control /vercel /vercel/sandbox /vercel/sandbox/workspace \
+ && chmod 0644 /vercel/sandbox/workspace/Solution.bin
+ENTRYPOINT ["python3", "/opt/motive/test_vercel_launcher.py"]

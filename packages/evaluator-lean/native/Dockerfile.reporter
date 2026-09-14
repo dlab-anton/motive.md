@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1
+ARG TOOL_IMAGE=motive-evaluator-tools:namespace-lock-review-r2
+FROM ${TOOL_IMAGE} AS build
+USER root
+WORKDIR /build/comparator
+COPY packages/evaluator-lean/native/motive-facts-suffix.lean packages/evaluator-lean/native/prepare-reporter-source.mjs /motive-build/
+RUN git init \
+  && git remote add origin https://github.com/leanprover/comparator.git \
+  && git fetch --depth=1 origin 2312244ac716564a61cc0bf4e107d9abf1757a61 \
+  && test "$(git rev-parse FETCH_HEAD)" = 2312244ac716564a61cc0bf4e107d9abf1757a61 \
+  && git checkout --detach FETCH_HEAD \
+  && node -e "const m=require('./lake-manifest.json'); const p=m.packages.find(p=>p.name==='lean4export'); if(p?.rev!=='cacf989bd75f608700820f6afc595f32e7a99a4d')process.exit(1)" \
+  && node /motive-build/prepare-reporter-source.mjs \
+  && lake build motive_reporter \
+  && test "$(git -C .lake/packages/lean4export rev-parse HEAD)" = cacf989bd75f608700820f6afc595f32e7a99a4d \
+  && install -D -m 0555 .lake/build/bin/motive_reporter /out/motive-comparator-reporter \
+  && install -D -m 0444 MotiveReporter.lean /out/MotiveReporter.lean
+
+FROM ${TOOL_IMAGE}
+USER root
+COPY --from=build /out/motive-comparator-reporter /opt/evaluator/bin/motive-comparator-reporter
+COPY --from=build /out/MotiveReporter.lean /opt/evaluator/identities/MotiveReporter.lean
+COPY --from=build /motive-build/reporter-source-identity.json /opt/evaluator/identities/reporter-source-identity.json
+LABEL motive.reporter-experiment="trusted-checker-facts-0.1" \
+      motive.stock-comparator-commit="2312244ac716564a61cc0bf4e107d9abf1757a61"
+USER node

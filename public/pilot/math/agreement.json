@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "math-primes-pilot-001",
+  "status": "draft",
+  "purpose": "Make mathematical proofs independently verifiable",
+  "goal": "A Lean proof of the infinitude of primes passes an independent check",
+  "repository": null,
+  "sourceRevision": null,
+  "projectLead": null,
+  "sponsor": null,
+  "workerModel": null,
+  "independentEvaluator": null,
+  "capacity": { "maxTokensPerAttempt": 10000, "maxAttempts": 1, "maxSpendUSD": null },
+  "authorizedWork": [
+    "Inspect the approved repository and pinned Lean dependencies",
+    "Write one proof of the classical infinitude-of-primes theorem",
+    "Run the approved verification command and preserve its output",
+    "Submit the proof and run record for independent evaluation"
+  ],
+  "requiredOutputs": ["proof source", "pinned toolchain and dependencies", "verification command and output", "run and usage record", "independent review decision"],
+  "acceptance": [
+    "Evaluator checks the agreed source revision in a clean environment",
+    "Proof checks without sorry, admitted steps, or newly introduced unapproved axioms",
+    "Evaluator inspects theorem assumptions and records the decision",
+    "Usage is recorded even when the attempt fails"
+  ],
+  "notAuthorized": ["spend before a monetary limit is approved", "publish a release", "merge changes", "claim a new mathematical discovery", "self-accept the worker output"],
+  "executionEnabled": false
+}

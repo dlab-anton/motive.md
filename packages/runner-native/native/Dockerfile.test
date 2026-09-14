@@ -1,0 +1,62 @@
+FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS codex
+LABEL motive.purpose=codex-profile-repair
+RUN npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.153.4 \
+ && test "$(codex --version)" = "codex-cli 0.153.4"
+
+FROM motive-native-collector:local-test AS build
+USER root
+COPY worker-launcher.c worker-runtime-check.c setuid-probe.c /src/
+RUN gcc -std=c17 -Wall -Wextra -Werror -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie -Wl,-z,relro,-z,now -o /worker-launcher /src/worker-launcher.c \
+ && gcc -std=c17 -Wall -Wextra -Werror -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie -Wl,-z,relro,-z,now -o /worker-runtime-check /src/worker-runtime-check.c \
+ && gcc -std=c17 -Wall -Wextra -Werror -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie -Wl,-z,relro,-z,now -o /setuid-probe /src/setuid-probe.c
+
+FROM motive-native-collector:local-test
+LABEL motive.purpose=protected-worker-runtime-test
+USER root
+COPY --from=codex /usr/local/lib/node_modules/@openai/codex /usr/local/lib/node_modules/@openai/codex
+COPY --from=build /worker-launcher /opt/motive/bin/worker-launcher
+COPY --from=build /worker-runtime-check /opt/motive/bin/worker-runtime-check
+COPY --from=build /setuid-probe /opt/motive/bin/setuid-probe
+COPY hostile-probe.py codex-probe.mjs test_launcher.py /opt/motive/test/
+COPY catalog.ts /opt/motive/build/catalog.ts
+RUN mkdir -p /opt/motive/codex-config /run/motive/channels /var/lib/motive/control /var/lib/motive/worker/tmp /vercel/sandbox/workspace \
+ && ln -s ../lib/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex \
+ && ln -s /var/lib/motive/worker/installation_id /opt/motive/codex-config/installation_id \
+ && node -e "import('/opt/motive/build/catalog.ts').then(m => process.stdout.write(m.serializeLocalMockModelCatalog()))" > /opt/motive/codex-config/model-catalog.json \
+ && printf '%s\n' \
+    'model = "motive-local-mock-v1"' \
+    'model_provider = "motive_mock"' \
+    'model_catalog_json = "/opt/motive/codex-config/model-catalog.json"' \
+    'model_reasoning_effort = "low"' \
+    'model_reasoning_summary = "none"' \
+    'sandbox_mode = "read-only"' \
+    'approval_policy = "never"' \
+    'web_search = "disabled"' \
+    '' \
+    '[features]' \
+    'multi_agent = false' \
+    'multi_agent_v2 = false' \
+    'apps = false' \
+    'plugins = false' \
+    'memories = false' \
+    'goals = false' \
+    'hooks = false' \
+    'shell_snapshot = false' \
+    '' \
+    '[model_providers.motive_mock]' \
+    'name = "Motive deterministic local mock"' \
+    'base_url = "http://127.0.0.1:4545/v1"' \
+    'env_key = "MOTIVE_RUN_CAPABILITY"' \
+    'wire_api = "responses"' \
+    'request_max_retries = 0' \
+    'stream_max_retries = 0' \
+    'supports_websockets = false' > /opt/motive/codex-config/config.toml \
+ && printf 'trusted-controller-channel\n' > /run/motive/channels/controller \
+ && chown -R root:root /opt/motive/bin /opt/motive/test /opt/motive/codex-config /run/motive \
+ && chmod 0555 /opt/motive/bin /opt/motive/test /opt/motive/codex-config /run/motive/channels \
+ && chmod 0755 /var/lib/motive/control \
+ && chmod 0555 /opt/motive/bin/worker-launcher /opt/motive/bin/worker-runtime-check \
+ && chmod 4555 /opt/motive/bin/setuid-probe \
+ && chmod 0444 /opt/motive/test/* /opt/motive/codex-config/config.toml /opt/motive/codex-config/model-catalog.json /run/motive/channels/controller \
+ && rm -rf /opt/motive/build
+ENTRYPOINT ["python3", "/opt/motive/test/test_launcher.py"]

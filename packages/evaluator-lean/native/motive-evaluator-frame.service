@@ -1,0 +1,15 @@
+[Unit]
+Description=Motive fixed trusted evaluator frame rehearsal
+Wants=user-runtime-dir@1000.service user@1000.service
+After=user-runtime-dir@1000.service user@1000.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/motive/bin/evaluator-frame-command
+ExecStopPost=/usr/bin/systemctl --no-block poweroff
+TimeoutStartSec=5min
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target

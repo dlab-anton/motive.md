@@ -1,0 +1,1980 @@
+{
+  "api_version": "1.8.0",
+  "automatic_writeback_ready": false,
+  "components": {
+    "schemas": {
+      "EvidenceCounts": {
+        "properties": {
+          "contradicting": {
+            "default": 0,
+            "title": "Contradicting",
+            "type": "integer"
+          },
+          "neutral": {
+            "default": 0,
+            "title": "Neutral",
+            "type": "integer"
+          },
+          "supporting": {
+            "default": 0,
+            "title": "Supporting",
+            "type": "integer"
+          }
+        },
+        "title": "EvidenceCounts",
+        "type": "object"
+      },
+      "EvidenceCreate": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optionally update hypothesis confidence",
+            "title": "Confidence"
+          },
+          "content": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "created_by": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Created By",
+            "type": "string"
+          },
+          "evidence_type": {
+            "$ref": "#/components/schemas/EvidenceType"
+          },
+          "expected_channel_id": {
+            "description": "Optional current channel identity precondition. New evidence is added only when the locked hypothesis still belongs to this channel.",
+            "format": "uuid",
+            "title": "Expected Channel Id",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "strength": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength"
+          }
+        },
+        "required": [
+          "content",
+          "evidence_type",
+          "created_by"
+        ],
+        "title": "EvidenceCreate",
+        "type": "object"
+      },
+      "EvidenceCreateResponse": {
+        "description": "Response for POST /evidence \u2014 returns both the new evidence and the updated hypothesis.",
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/EvidenceRead"
+          },
+          "hypothesis": {
+            "$ref": "#/components/schemas/HypothesisRead"
+          }
+        },
+        "required": [
+          "evidence",
+          "hypothesis"
+        ],
+        "title": "EvidenceCreateResponse",
+        "type": "object"
+      },
+      "EvidenceRead": {
+        "properties": {
+          "confidence_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence After"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "evidence_type": {
+            "$ref": "#/components/schemas/EvidenceType"
+          },
+          "hypothesis_id": {
+            "format": "uuid",
+            "title": "Hypothesis Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "strength": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength"
+          }
+        },
+        "required": [
+          "id",
+          "hypothesis_id",
+          "content",
+          "source",
+          "evidence_type",
+          "strength",
+          "created_by",
+          "created_at"
+        ],
+        "title": "EvidenceRead",
+        "type": "object"
+      },
+      "EvidenceType": {
+        "enum": [
+          "supporting",
+          "contradicting",
+          "neutral"
+        ],
+        "title": "EvidenceType",
+        "type": "string"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HypothesisCreate": {
+        "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Channel/category (e.g. stock-predictions, debugging)",
+            "title": "Channel"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "created_by": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Created By",
+            "type": "string"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When should this hypothesis be resolved by?",
+            "title": "Deadline"
+          },
+          "experimental_design": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Structured experiment plan: variables, controls, data sources, success criteria",
+            "title": "Experimental Design"
+          },
+          "falsification_criteria": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What evidence would disprove this hypothesis?",
+            "title": "Falsification Criteria"
+          },
+          "initial_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Confidence at creation time (auto-set from confidence if omitted). Immutable after creation.",
+            "title": "Initial Confidence"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Domain-specific structured data (e.g. ticker, target_price)",
+            "title": "Metadata"
+          },
+          "null_hypothesis": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "H0: The default assumption to reject (e.g. 'ACME will NOT reach $5')",
+            "title": "Null Hypothesis"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Structured result when concluded: actual vs predicted, effect size, narrative",
+            "title": "Outcome"
+          },
+          "significance_level": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Alpha level for rejecting H0 (e.g. 0.05)",
+            "title": "Significance Level"
+          },
+          "statement": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Statement",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/HypothesisStatus",
+            "default": "draft"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "statement",
+          "created_by"
+        ],
+        "title": "HypothesisCreate",
+        "type": "object"
+      },
+      "HypothesisRead": {
+        "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "evidence_counts": {
+            "$ref": "#/components/schemas/EvidenceCounts"
+          },
+          "experimental_design": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experimental Design"
+          },
+          "falsification_criteria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Falsification Criteria"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "initial_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Confidence"
+          },
+          "is_archived": {
+            "title": "Is Archived",
+            "type": "boolean"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "null_hypothesis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Null Hypothesis"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "significance_level": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Significance Level"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/HypothesisStatus"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "statement",
+          "context",
+          "falsification_criteria",
+          "status",
+          "confidence",
+          "tags",
+          "created_by",
+          "parent_id",
+          "is_archived",
+          "evidence_counts",
+          "deadline",
+          "metadata",
+          "null_hypothesis",
+          "experimental_design",
+          "significance_level",
+          "outcome",
+          "channel",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "HypothesisRead",
+        "type": "object"
+      },
+      "HypothesisRevise": {
+        "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "created_by": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Created By",
+            "type": "string"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "experimental_design": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Updated experiment plan for the revision",
+            "title": "Experimental Design"
+          },
+          "falsification_criteria": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What evidence would disprove the revised hypothesis?",
+            "title": "Falsification Criteria"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "null_hypothesis": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "H0 for the revised hypothesis",
+            "title": "Null Hypothesis"
+          },
+          "rationale": {
+            "description": "Why is this hypothesis being revised? What evidence or reasoning prompted the change?",
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "significance_level": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Significance Level"
+          },
+          "statement": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Statement",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "statement",
+          "rationale",
+          "created_by"
+        ],
+        "title": "HypothesisRevise",
+        "type": "object"
+      },
+      "HypothesisStatus": {
+        "enum": [
+          "draft",
+          "active",
+          "testing",
+          "supported",
+          "refuted",
+          "inconclusive",
+          "revised",
+          "archived"
+        ],
+        "title": "HypothesisStatus",
+        "type": "string"
+      },
+      "HypothesisUpdate": {
+        "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "experimental_design": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experimental Design"
+          },
+          "falsification_criteria": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Falsification Criteria"
+          },
+          "is_archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Archived"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "null_hypothesis": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Null Hypothesis"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "significance_level": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Significance Level"
+          },
+          "statement": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HypothesisStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          }
+        },
+        "title": "HypothesisUpdate",
+        "type": "object"
+      },
+      "InsightCreate": {
+        "properties": {
+          "channel": {
+            "description": "Domain scope (auto-normalized lowercase)",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Channel",
+            "type": "string"
+          },
+          "content": {
+            "description": "The insight in natural language",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "created_by": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Created By",
+            "type": "string"
+          },
+          "insight_type": {
+            "$ref": "#/components/schemas/InsightType",
+            "description": "Type of insight"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Structured data (calibration numbers, hypothesis references, etc.)",
+            "title": "Metadata"
+          }
+        },
+        "required": [
+          "channel",
+          "insight_type",
+          "content",
+          "created_by"
+        ],
+        "title": "InsightCreate",
+        "type": "object"
+      },
+      "InsightRead": {
+        "properties": {
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "insight_type": {
+            "$ref": "#/components/schemas/InsightType"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By"
+          }
+        },
+        "required": [
+          "id",
+          "channel",
+          "insight_type",
+          "content",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "InsightRead",
+        "type": "object"
+      },
+      "InsightType": {
+        "enum": [
+          "calibration",
+          "bias",
+          "prior",
+          "pattern"
+        ],
+        "title": "InsightType",
+        "type": "string"
+      },
+      "InsightUpdate": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Updated insight text",
+            "title": "Content"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Updated structured data",
+            "title": "Metadata"
+          },
+          "updated_by": {
+            "description": "Who is making this update",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Updated By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "updated_by"
+        ],
+        "title": "InsightUpdate",
+        "type": "object"
+      },
+      "PaginatedResponse_EvidenceRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "PaginatedResponse[EvidenceRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_InsightRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InsightRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "PaginatedResponse[InsightRead]",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "APIKeyHeader": {
+        "in": "header",
+        "name": "X-API-Key",
+        "type": "apiKey"
+      }
+    }
+  },
+  "contract_version": "hypothesis-http-writeback-capabilities/3",
+  "evidence_target_precondition": {
+    "field": "expected_channel_id",
+    "new_write_locking": "The tenant-scoped hypothesis and exact current channel identity are locked before evidence insertion",
+    "new_write_mismatch_status": 409,
+    "nullable": false,
+    "omitted_field_legacy_digest_compatible": true,
+    "required": false,
+    "revision_semantics": "Historical observation binding only; no current-revision assertion is implemented",
+    "same_name_channel_replacement_rejected": true,
+    "same_payload_replay_after_channel_move": true
+  },
+  "idempotency": {
+    "actor_is_authorization": false,
+    "changed_payload_status": 409,
+    "key_max_length": 200,
+    "key_pattern": "^[!-~]+$",
+    "key_required": false,
+    "operations": [
+      "hypotheses:create",
+      "evidence:create",
+      "insights:create"
+    ],
+    "payload": "SHA-256 of sorted UTF-8 JSON of the validated model including defaults; implicit initial_confidence resolved; evidence target UUID included in digest; expected_channel_id included only when provided",
+    "retention": "No expiration; deleting replay records removes retry guarantees",
+    "scope": [
+      "authenticated_tenant",
+      "operation",
+      "Idempotency-Key"
+    ],
+    "success_status": 201
+  },
+  "implementation_files_sha256": {
+    "alembic/versions/017_write_idempotency.py": "c82cd5253f1975e4da7a7b123d483c858ca017d11c858e92a06e8aa1560ccf7c",
+    "app/api/v1/endpoints/evidence.py": "88ea2d93abc193743c153252240ef59d76c39d0a128d281c9c8fc9b0b3e08d5a",
+    "app/api/v1/endpoints/hypotheses.py": "e7f4f2843be47850676ae9c7ad02658b44e523e5708857fdddae78744742d5de",
+    "app/api/v1/endpoints/insights.py": "b7d521215ddfd709b07cb5b10c5df6bfffc4e0d802932446e1fcbe78a951898e",
+    "app/db/models/__init__.py": "23350a4e7da532500fde5dfc781c9e8a78b1cbb1f55fa4f940796615a6be6db2",
+    "app/db/models/idempotency.py": "a8eeaea48ca2f385bc133a725203c4d63022097a1fd71207d42c8ef1ea4217d7",
+    "app/schemas/common.py": "096dd2c8fae23ab952dde79380508e549f5c2a65deb18cf31ab018ea5d07a24b",
+    "app/schemas/evidence.py": "0f04147a9a488a732e6f0c61eef5ca693a55e7bc4372ae0a38985317300ad900",
+    "app/schemas/hypothesis.py": "e79ec026e1ec6d1626da81a186c4e0e4bb9e9bfe147fe760e7b9ca9ad133338d",
+    "app/schemas/insight.py": "88a803847caa2936e574dfe4be3d5970450d97a2977f2e30e0066204354c89c0",
+    "app/services/evidence_import_service.py": "70cc72d76a9f99a8cc847bb97767a68188d6e058a7eb7fa4d69adcce4f567198",
+    "app/services/idempotency_service.py": "2254612b817899d2e2d42fa464c32444c3e069d3353a296191a01cab08dcb03d"
+  },
+  "implementation_hash_encoding": "UTF-8 source text with normalized LF line endings",
+  "implementation_sha256": "faac1ad462664fd5b484399ae224e90c180615f9cce5f1432a3dcc4583e1165e",
+  "limitations": {
+    "assessment_or_review_route": false,
+    "authenticated_actor_attribution": false,
+    "changed_payload_with_same_key_conflicts": true,
+    "evidence_metadata_field": false,
+    "expected_channel_id_enforced_for_new_evidence": true,
+    "expected_revision_or_if_match_enforced": false,
+    "idempotency_key_enforced": true,
+    "independent_conclusion_review": false,
+    "investigation_or_lease_route": false,
+    "retry_returns_original_record": true,
+    "tenant_id_is_public_identifier": false
+  },
+  "paths": {
+    "/api/v1/hypotheses": {
+      "post": {
+        "description": "Create a new hypothesis. Starts as `draft` (or `active` if specified). Set `falsification_criteria` to make it testable.",
+        "operationId": "create_hypothesis_api_v1_hypotheses_post",
+        "parameters": [
+          {
+            "description": "Optional durable create identity, scoped to authenticated tenant and operation. Exact normalized payload retries return the original 201 body; changed payload returns 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "pattern": "^[!-~]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional durable create identity, scoped to authenticated tenant and operation. Exact normalized payload retries return the original 201 body; changed payload returns 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HypothesisCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HypothesisRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Create hypothesis",
+        "tags": [
+          "hypotheses"
+        ]
+      }
+    },
+    "/api/v1/hypotheses/{hypothesis_id}": {
+      "get": {
+        "operationId": "get_hypothesis_api_v1_hypotheses__hypothesis_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "hypothesis_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Hypothesis Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HypothesisRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Get hypothesis",
+        "tags": [
+          "hypotheses"
+        ]
+      },
+      "patch": {
+        "operationId": "update_hypothesis_api_v1_hypotheses__hypothesis_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "hypothesis_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Hypothesis Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HypothesisUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HypothesisRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Update hypothesis",
+        "tags": [
+          "hypotheses"
+        ]
+      }
+    },
+    "/api/v1/hypotheses/{hypothesis_id}/evidence": {
+      "get": {
+        "operationId": "list_evidence_api_v1_hypotheses__hypothesis_id__evidence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "hypothesis_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Hypothesis Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by evidence type",
+            "in": "query",
+            "name": "evidence_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EvidenceType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by evidence type",
+              "title": "Evidence Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_EvidenceRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List evidence",
+        "tags": [
+          "evidence"
+        ]
+      },
+      "post": {
+        "description": "Add evidence to a hypothesis. Optionally update confidence in the same call.\nReturns both the new evidence and the updated hypothesis. Evidence is immutable once created.\nEach entry records `confidence_after` \u2014 the hypothesis confidence at this point in time.",
+        "operationId": "add_evidence_api_v1_hypotheses__hypothesis_id__evidence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "hypothesis_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Hypothesis Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional durable create identity, scoped to authenticated tenant and operation. Exact normalized payload retries return the original 201 body; changed payload returns 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "pattern": "^[!-~]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional durable create identity, scoped to authenticated tenant and operation. Exact normalized payload retries return the original 201 body; changed payload returns 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvidenceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "Target channel mismatch or conflicting keyed request"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Add evidence",
+        "tags": [
+          "evidence"
+        ]
+      }
+    },
+    "/api/v1/hypotheses/{hypothesis_id}/revise": {
+      "post": {
+        "operationId": "revise_hypothesis_api_v1_hypotheses__hypothesis_id__revise_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "hypothesis_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Hypothesis Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HypothesisRevise"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HypothesisRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Revise hypothesis",
+        "tags": [
+          "timeline"
+        ]
+      }
+    },
+    "/api/v1/insights": {
+      "get": {
+        "operationId": "list_insights_api_v1_insights_get",
+        "parameters": [
+          {
+            "description": "Filter by channel",
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by channel",
+              "title": "Channel"
+            }
+          },
+          {
+            "description": "Filter by insight type",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/InsightType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by insight type",
+              "title": "Type"
+            }
+          },
+          {
+            "description": "Filter by agent",
+            "in": "query",
+            "name": "created_by",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "pattern": "^(?:[\\w\\-\\.@\\s]+|motive:project:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by agent",
+              "title": "Created By"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_InsightRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List insights",
+        "tags": [
+          "insights"
+        ]
+      },
+      "post": {
+        "operationId": "create_insight_api_v1_insights_post",
+        "parameters": [
+          {
+            "description": "Optional durable create identity, scoped to authenticated tenant and operation. Exact normalized payload retries return the original 201 body; changed payload returns 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "pattern": "^[!-~]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional durable create identity, scoped to authenticated tenant and operation. Exact normalized payload retries return the original 201 body; changed payload returns 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsightCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsightRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Create insight",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/api/v1/insights/{insight_id}": {
+      "get": {
+        "operationId": "get_insight_api_v1_insights__insight_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "insight_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Insight Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsightRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Get insight",
+        "tags": [
+          "insights"
+        ]
+      },
+      "patch": {
+        "operationId": "update_insight_api_v1_insights__insight_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "insight_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Insight Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsightUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsightRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Update insight",
+        "tags": [
+          "insights"
+        ]
+      }
+    }
+  },
+  "schema_revision": "017_write_idempotency",
+  "source_baseline": "7546920632aa48107e6ec5f1b268f2b6d6a4be14",
+  "source_overlay": "motive/atomic-writeback (local candidate, not deployed)",
+  "surface_sha256": "c42a174eba3f293bcb2165c298ccb1750aff0ce6e8800c82ed31f2d138f81119",
+  "verification_scope": "LOCAL candidate only; atomic writes and migration tested in a runner-created UUID PostgreSQL database. Live runtime unchanged."
+}

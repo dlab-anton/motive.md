@@ -1,0 +1,111 @@
+{
+  "format": "motive.evaluator-toolchain-build/0.1",
+  "observed_on": "2026-09-06",
+  "status": "BEHAVIORAL_CASES_PASSED_WITH_OPEN_SECURITY_CONDITION",
+  "image": {
+    "tag": "motive-evaluator-tools:pinned-review",
+    "id": "sha256:fa35e29fb21455a685a2d68b82701a48c5b8ee30c9c9c7c55348d5b4b06bfe5f",
+    "platform": "linux/amd64",
+    "size_bytes": 1032334382,
+    "runtime_uid": 1000,
+    "runtime_gid": 1000,
+    "debian_package_inventory_sha256": "ff3dc3e83698d01fc6c1394df59fbb1eeec2e8bf5c70a03c9e2e6cd4601a1763"
+  },
+  "sources": {
+    "lean_toolchain": "leanprover/lean4:v4.34.0-rc2",
+    "lean_release_asset": {
+      "name": "lean-4.34.0-rc2-linux.tar.zst",
+      "published_size_bytes": 580281129,
+      "published_sha256": "3d011041203acacf300d343a39673f7d233743397993797c941346ae9e5df1a8"
+    },
+    "comparator": {
+      "commit": "2312244ac716564a61cc0bf4e107d9abf1757a61",
+      "github_verification": "unsigned"
+    },
+    "lean4export": {
+      "commit": "cacf989bd75f608700820f6afc595f32e7a99a4d",
+      "github_verification": "valid"
+    },
+    "landrun": {
+      "commit": "5ed4a3db3a4ad930d577215c6b9abaa19df7f99f",
+      "github_verification": "valid"
+    },
+    "go_builder_image": "sha256:c423747fbd96fd8f0b1102d947f51f9b266060217478e5f9bf86f145969562ee",
+    "debian_node_base_image": "sha256:6642ef280aebc09c4541bee0b15c9f89f0f3f3c247ddee79ae1d37eddfdcbbaa"
+  },
+  "executables": {
+    "lean_sha256": "e8baaa71855a616dc351028f3ad2200051b0671f423a1696a100e809302d5550",
+    "lake_sha256": "6f53827dab18010d6c690d14c8401cacabc1db958edb3552a877ed4cf1dd995d",
+    "landrun_sha256": "afb46062115d04bf3ac26b2fbbfedfe758f76d18243b284de744c24f21282859",
+    "af_unix_probe_sha256": "61a82f27699c3edfc9e203ef6e7ccc89f1a6404d07e5fb7de7ed11258e7b1dc7",
+    "lean4export_sha256": "4fa9e14cada304109e85da5048bcd411cf781a03539b3e50953e5c537074bd9e",
+    "comparator_sha256": "5dca99684e841c3c1dd8a50fa18d9119327295cf3b68c6e4e70f0c17c31321cc"
+  },
+  "policy": {
+    "evaluator_contract_sha256": "bdc46b110292803c3edf1d6e25c31cd5c23fb4c7ef6e452e8a6057c0d4bef20e",
+    "artifact_sealer_sha256": "c084231e32e07ad180a7a0acfd5876b39f39638786ef9f3fe6cd4684e58c1dde",
+    "domain_contracts_sha256": "ae6e8cd5de40db6d3590e4f528c76bad2a106a1f7905a53ccde7e3e3eb58ead0",
+    "fixture_ingestion_validator_sha256": "2b21ce995e9ed4ab614fc3e20be79661533344c038933f0d6c54773e22ba951f"
+  },
+  "fixtures": {
+    "fixture_manifest_sha256": "ef7949f002685483c02d068476a338de92ecb469a427715f144f704e75c727d5",
+    "count": 8,
+    "runnable_after_preflight": 6,
+    "policy_rejected_before_execution": 2,
+    "result": "BEHAVIORAL_CASES_PASSED",
+    "human_acceptance": "PENDING"
+  },
+  "host_preflight": {
+    "kernel": "Linux 5.15.167.4-microsoft-standard-WSL2 x86_64 GNU/Linux",
+    "result": "REJECTED_BEFORE_FIXTURE_EXECUTION",
+    "exit_code": 20,
+    "reason": "kernel 6.7 or newer is required; refusing Landrun best-effort degradation"
+  },
+  "systemd_qemu": {
+    "image": {
+      "tag": "motive-evaluator-systemd-qemu:behavioral-review",
+      "id": "sha256:3b6bf51cf6942731e6d93d9720ab589e905056c329e0497130fbca26d6712246",
+      "size_bytes": 2224837618,
+      "runtime_uid": 65534,
+      "runtime_gid": 65534
+    },
+    "guest": {
+      "kernel": "Linux 6.12.107+deb13-amd64",
+      "pid_1": "systemd",
+      "fixture_uid": 1000,
+      "vmlinuz_sha256": "2b2358b37674d2505350528875bb17afae2a36522a9e8a9417eaca65a7da0e08",
+      "initrd_sha256": "fc313d1b18f3ad776cf96c023c92c2163e80c431542f090078e05445264338f7",
+      "rootfs_ext4_sha256": "d27aee37e6745f2bb0e3c4f6499fe5070b462e14737658f094842d9e7aca55a3"
+    },
+    "outer_runtime": {
+      "network": "none",
+      "read_only_root": true,
+      "host_mounts": 0,
+      "capabilities_dropped": "ALL",
+      "no_new_privileges": true,
+      "pids_limit": 128,
+      "memory_bytes": 4294967296,
+      "nano_cpus": 2000000000
+    },
+    "enforcement_probes": {
+      "af_unix_positive_control": "ALLOWED",
+      "af_unix_inside_restricted_unit": "DENIED_EAFNOSUPPORT",
+      "landrun_allowed_write": "ALLOWED",
+      "landrun_sibling_write": "DENIED"
+    },
+    "cases": {
+      "valid-proof": { "exit_code": 0, "log_sha256": "4d120b625d4cbfcdacba62fcc0c69956b83741c76869b02a1a8e5ec3dccf7b02" },
+      "wrong-target-statement": { "exit_code": 1, "log_sha256": "c821aad20c630b89161f2017570e0924fd3fc3fc286f2033627d82673ccc8c1f" },
+      "incomplete-proof": { "exit_code": 1, "log_sha256": "cabc47982fb78c97f576206554d747e9a59400542f89d1c35e30ec32bcd7bce0" },
+      "unapproved-custom-axiom": { "exit_code": 1, "log_sha256": "d089db498b7f88969be87175ffa96d1c6ac701afed48334405412f2d212e6093" },
+      "transitive-incomplete-dependency": { "exit_code": 1, "log_sha256": "042e4c7147dda0d8c17ed778360427c4b7290fec8cf1a73fd0d2531b1b0e0e67" },
+      "forged-acceptance-output": { "exit_code": 1, "log_sha256": "f903b4ac5fe4e79f953f5e5a65072b76ff37d6db2114a8f3418748be0b848bd5" },
+      "altered-challenge": { "result": "REJECTED_PRE_EXECUTION_PROFILE_INVALID" },
+      "modified-build-or-checker": { "result": "REJECTED_PRE_EXECUTION_PROFILE_INVALID" }
+    },
+    "container_exit_code": 0,
+    "human_acceptance": "PENDING"
+  },
+  "open_security_condition": "Comparator issue 77 descendant lifetime is unresolved by the approved stock commit; PR 78 remains open and is not part of this image",
+  "deployment_approved": false
+}

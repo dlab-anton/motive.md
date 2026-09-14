@@ -1,0 +1,7 @@
+{
+  "servers": {},
+  "agents": {
+    "worker": { "mcpServers": [] },
+    "planner": { "mcpServers": [] }
+  }
+}

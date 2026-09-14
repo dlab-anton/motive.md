@@ -1,0 +1,116 @@
+# syntax=docker/dockerfile:1
+
+ARG GO_IMAGE=golang:1.25.1-bookworm@sha256:c423747fbd96fd8f0b1102d947f51f9b266060217478e5f9bf86f145969562ee
+ARG BASE_IMAGE=node:24.20.0-bookworm-slim@sha256:6642ef280aebc09c4541bee0b15c9f89f0f3f3c247ddee79ae1d37eddfdcbbaa
+
+FROM ${GO_IMAGE} AS landrun-build
+ARG LANDRUN_COMMIT=5ed4a3db3a4ad930d577215c6b9abaa19df7f99f
+WORKDIR /build/landrun
+RUN git init \
+  && git remote add origin https://github.com/Zouuup/landrun.git \
+  && git fetch --depth=1 origin "${LANDRUN_COMMIT}" \
+  && test "$(git rev-parse FETCH_HEAD)" = "${LANDRUN_COMMIT}" \
+  && git checkout --detach FETCH_HEAD \
+  && CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags='-s -w -buildid=' -o /out/landrun ./cmd/landrun
+COPY packages/evaluator-lean/native/af-unix-probe.c /build/af-unix-probe.c
+RUN cc -std=c11 -O2 -Wall -Wextra -Werror -static-pie \
+      -o /out/af-unix-probe /build/af-unix-probe.c
+
+FROM ${BASE_IMAGE} AS lean-build
+ARG LEAN_VERSION=4.34.0-rc2
+ARG LEAN_RELEASE_SHA256=3d011041203acacf300d343a39673f7d233743397993797c941346ae9e5df1a8
+ARG COMPARATOR_COMMIT=2312244ac716564a61cc0bf4e107d9abf1757a61
+ARG LEAN4EXPORT_COMMIT=cacf989bd75f608700820f6afc595f32e7a99a4d
+ARG DEBIAN_SNAPSHOT=20260824T000000Z
+RUN sed -i \
+      -e "s|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/|" \
+      -e "s|http://deb.debian.org/debian|http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && printf '%s\n' 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99snapshot \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates=20250419~deb12u1 \
+    curl=7.88.1-10+deb12u15 \
+    git=1:2.39.5-0+deb12u3 \
+    zstd=1.5.4+dfsg2-5 \
+  && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+RUN curl --fail --location --proto '=https' --tlsv1.2 --retry 4 \
+      --output lean.tar.zst \
+      "https://github.com/leanprover/lean4/releases/download/v${LEAN_VERSION}/lean-${LEAN_VERSION}-linux.tar.zst" \
+  && echo "${LEAN_RELEASE_SHA256}  lean.tar.zst" | sha256sum --check --strict \
+  && mkdir -p /opt/lean \
+  && tar --use-compress-program=unzstd --extract --file lean.tar.zst --directory /opt/lean --strip-components=1 \
+  && rm lean.tar.zst
+ENV PATH=/opt/lean/bin:${PATH}
+RUN mkdir comparator \
+  && cd comparator \
+  && git init \
+  && git remote add origin https://github.com/leanprover/comparator.git \
+  && git fetch --depth=1 origin "${COMPARATOR_COMMIT}" \
+  && test "$(git rev-parse FETCH_HEAD)" = "${COMPARATOR_COMMIT}" \
+  && git checkout --detach FETCH_HEAD \
+  && test "$(cat lean-toolchain)" = 'leanprover/lean4:v4.34.0-rc2' \
+  && node -e "const m=require('./lake-manifest.json'); const p=m.packages.find(p=>p.name==='lean4export'); if(p?.rev!==process.argv[1]) process.exit(1)" "${LEAN4EXPORT_COMMIT}" \
+  && lake build lean4export comparator \
+  && test "$(git -C .lake/packages/lean4export rev-parse HEAD)" = "${LEAN4EXPORT_COMMIT}" \
+  && install -D -m 0555 .lake/build/bin/comparator /out/comparator \
+  && install -D -m 0555 .lake/packages/lean4export/.lake/build/bin/lean4export /out/lean4export \
+  && printf '%s\n' "${COMPARATOR_COMMIT}" > /out/comparator.commit \
+  && printf '%s\n' "${LEAN4EXPORT_COMMIT}" > /out/lean4export.commit
+
+FROM ${BASE_IMAGE}
+ARG LANDRUN_COMMIT=5ed4a3db3a4ad930d577215c6b9abaa19df7f99f
+ARG DEBIAN_SNAPSHOT=20260824T000000Z
+RUN sed -i \
+      -e "s|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/|" \
+      -e "s|http://deb.debian.org/debian|http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && printf '%s\n' 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99snapshot \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates=20250419~deb12u1 \
+    dbus-user-session=1.14.10-1~deb12u1 \
+    git=1:2.39.5-0+deb12u3 \
+    systemd=252.39-1~deb12u2 \
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=lean-build /opt/lean /opt/lean
+COPY --from=lean-build /out/comparator.commit /out/lean4export.commit /opt/evaluator/identities/
+COPY --from=lean-build /out/comparator /opt/evaluator/bin/comparator
+COPY --from=lean-build /out/lean4export /opt/evaluator/bin/lean4export
+COPY --from=landrun-build /out/landrun /opt/evaluator/bin/landrun
+COPY --from=landrun-build /out/af-unix-probe /opt/evaluator/bin/af-unix-probe
+COPY --chmod=0444 packages/evaluator-lean/native/toolchain-pins.env /opt/evaluator/identities/toolchain-pins.env
+COPY --chmod=0555 packages/evaluator-lean/native/verify-toolchain.sh /opt/evaluator/bin/verify-toolchain
+COPY --chmod=0555 packages/evaluator-lean/native/prepare-fixtures.sh /opt/evaluator/bin/prepare-fixtures
+COPY --chmod=0555 packages/evaluator-lean/native/run-fixtures.sh /opt/evaluator/bin/run-fixtures
+COPY --chown=root:root packages/evaluator-lean/src/contract.ts /opt/evaluator/policy/packages/evaluator-lean/src/contract.ts
+COPY --chown=root:root packages/evaluator-lean/native/validate-fixture-ingestion.ts /opt/evaluator/policy/packages/evaluator-lean/native/validate-fixture-ingestion.ts
+COPY --chown=root:root packages/artifact-storage/src/sealer.ts packages/artifact-storage/src/types.ts /opt/evaluator/policy/packages/artifact-storage/src/
+COPY --chown=root:root packages/domain/src/contracts.ts /opt/evaluator/policy/packages/domain/src/contracts.ts
+COPY --chown=root:root fixtures/evaluator /opt/evaluator/fixtures
+RUN : > /etc/machine-id \
+  && rm -f /var/lib/dbus/machine-id \
+  && ln -s /etc/machine-id /var/lib/dbus/machine-id \
+  && printf '%s\n' "${LANDRUN_COMMIT}" > /opt/evaluator/identities/landrun.commit \
+  && dpkg-query -W | sort > /opt/evaluator/identities/debian-packages.txt \
+  && find /opt/evaluator/policy -type f -exec chmod 0444 {} + \
+  && find /opt/evaluator/policy -type d -exec chmod 0555 {} + \
+  && find /opt/evaluator/fixtures -type f -exec chmod 0444 {} + \
+  && find /opt/evaluator/fixtures -type d -exec chmod 0555 {} + \
+  && cd /opt/evaluator/fixtures \
+  && find . -type f ! -name fixture-manifest.sha256 -print0 | sort -z | xargs -0 sha256sum > fixture-manifest.sha256 \
+  && chmod 0444 fixture-manifest.sha256 /opt/evaluator/identities/debian-packages.txt \
+  && mkdir -p /work \
+  && chown node:node /work
+ENV PATH=/opt/evaluator/bin:/opt/lean/bin:/usr/local/bin:/usr/bin:/bin \
+    LEAN_ABORT_ON_PANIC=1 \
+    HOME=/home/node
+LABEL org.opencontainers.image.title="Motive pinned Lean evaluator tools" \
+      motive.lean-toolchain="leanprover/lean4:v4.34.0-rc2" \
+      motive.comparator-commit="2312244ac716564a61cc0bf4e107d9abf1757a61" \
+      motive.lean4export-commit="cacf989bd75f608700820f6afc595f32e7a99a4d" \
+      motive.landrun-commit="5ed4a3db3a4ad930d577215c6b9abaa19df7f99f"
+USER node
+WORKDIR /work
+CMD ["verify-toolchain"]

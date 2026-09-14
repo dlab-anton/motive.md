@@ -1,0 +1,8 @@
+FROM motive-native-collector:local-test AS helper
+FROM motive-control:orchestration-review
+USER root
+COPY --from=helper /opt/motive/collector /opt/motive/collector
+COPY packages/artifact-storage /app/packages/artifact-storage
+RUN mkdir -p /srv/motive/workspace && printf 'theorem demo : True := True.intro\n' > /srv/motive/workspace/Solution.lean && ln -s /etc/passwd /srv/motive/workspace/escape.lean && chown 2000:2000 /srv/motive/workspace && chmod 755 /srv/motive/workspace
+USER node
+ENTRYPOINT ["node", "--import", "tsx", "/app/packages/artifact-storage/native/reader-integration.ts"]

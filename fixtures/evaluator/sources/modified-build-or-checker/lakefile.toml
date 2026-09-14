@@ -1,0 +1,4 @@
+name = "untrusted_candidate_build"
+
+[[lean_lib]]
+name = "Solution"

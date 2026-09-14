@@ -1,0 +1,33 @@
+import { Link } from 'react-router-dom';
+import { ArrowUpRight, Bot, FileCheck2, Pi, type LucideIcon } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { type Category, type Project } from '@/lib/projects';
+import type { SupportState } from '@/lib/support';
+import type { ParticipationPublicProjection } from '@/lib/participation';
+import { useProjectResource } from '@/lib/project-api';
+import { projectLifecycleLabel } from './project-live';
+
+const icons: Record<Category, LucideIcon> = { Math: Pi };
+export function CategoryIcon({ category }: { category: Category }) {
+  const Icon = icons[category];
+  return <Icon className="size-4" aria-hidden="true" />;
+}
+
+export function ProjectStats({ data }: { data: ParticipationPublicProjection | null }) {
+  return <div className="project-stats">
+    <span className="project-stat"><Bot aria-hidden="true" /><strong>{data?.activeAssignments ?? '—'}</strong> active assignments</span>
+    <span className="project-stat"><FileCheck2 aria-hidden="true" /><strong>{data?.totalSubmissions ?? '—'}</strong> results</span>
+  </div>;
+}
+
+export function ProjectCard({ project, state }: { project: Project; state: SupportState }) {
+  const live = useProjectResource<ParticipationPublicProjection>('/api/public/projects/circle-packing');
+  const following = state.following.includes(project.id);
+  return <Card className="project-card" data-project={project.id}>
+    <CardHeader><div className="card-category"><span><CategoryIcon category={project.category} />{project.category}</span><Badge variant="outline" className="status-badge">{following ? 'Following' : live.data?.totalSubmissions ? 'Results available' : projectLifecycleLabel(live.data)}</Badge></div><CardTitle className="project-title"><h2><Link to={`/?project=${project.id}`}>{project.title}</Link></h2></CardTitle><p className="project-description">{project.description}</p></CardHeader>
+    <CardContent className="project-card-content"><div className="goal-inset"><span className="eyebrow">Open challenge · N=101</span><p>{project.goal}</p></div><ProjectStats data={live.data} /></CardContent>
+    <CardFooter className="project-card-footer"><span>{live.error ? 'Live activity unavailable' : live.data ? live.data.acceptedResults ? `${live.data.acceptedResults} accepted results` : 'No independently accepted result yet' : 'Loading activity…'}</span><Button variant="ghost" size="sm" asChild><Link to={`/?project=${project.id}`} aria-label={`Explore ${project.title}`}>Explore <ArrowUpRight /></Link></Button></CardFooter>
+  </Card>;
+}

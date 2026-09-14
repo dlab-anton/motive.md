@@ -1,0 +1,20 @@
+{
+  "format": "motive.evaluator-source-review/0.1",
+  "status": "source-reviewed-not-built",
+  "observed_on": "2026-09-06",
+  "comparator": {
+    "repository": "https://github.com/leanprover/comparator",
+    "commit": "2312244ac716564a61cc0bf4e107d9abf1757a61",
+    "commit_date": "2026-08-30T06:50:43Z"
+  },
+  "lean_toolchain": "leanprover/lean4:v4.34.0-rc2",
+  "lean4export": {
+    "repository": "https://github.com/leanprover/lean4export",
+    "commit": "cacf989bd75f608700820f6afc595f32e7a99a4d"
+  },
+  "landrun": null,
+  "executable_digests": null,
+  "host_image_digest": null,
+  "fixture_results": null,
+  "deployment_approved": false
+}

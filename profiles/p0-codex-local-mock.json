@@ -1,0 +1,40 @@
+{
+  "format": "motive.execution-profile/0.1",
+  "profile_id": "p0-codex-local-mock-win32-x64-0.153.4",
+  "status": "local-mock-tool-execution-blocked",
+  "captured_at": "2026-09-06",
+  "runtime": {
+    "codex_package": "@openai/codex@0.153.4",
+    "codex_reported_version": "codex-cli 0.153.4",
+    "native_binary_platform": "win32-x64",
+    "native_binary_sha256": "444a3f0008050605cae73cd9b7a2dcac61294062dfaab56dd20430fd6498518b",
+    "node": "v24.7.0"
+  },
+  "provider": {
+    "kind": "deterministic-local-responses-mock",
+    "model": "motive-local-mock-v1",
+    "wire_api": "responses",
+    "request_max_retries": 0,
+    "stream_max_retries": 0,
+    "websocket": false,
+    "authentication": "per-process non-secret fixture token"
+  },
+  "execution": {
+    "ephemeral": true,
+    "ignore_user_config": true,
+    "ignore_rules": true,
+    "sandbox": "read-only",
+    "jsonl": true,
+    "successful_file_reads": 0,
+    "required_file_reads": 2,
+    "web_search": "disabled",
+    "disabled_features": ["multi_agent", "multi_agent_v2", "apps", "plugins", "memories", "goals", "hooks", "shell_snapshot"],
+    "observed_parallel_tool_calls": true,
+    "git_repository_check": "skipped for isolated temporary fixture"
+  },
+  "claims": {
+    "provider_or_cloud_effects": "none",
+    "money_authorized_usd": "0.000000000000",
+    "money_consumed_usd": "0.000000000000"
+  }
+}

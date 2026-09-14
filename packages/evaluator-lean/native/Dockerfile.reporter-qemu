@@ -1,0 +1,72 @@
+# syntax=docker/dockerfile:1
+
+ARG TOOL_IMAGE=motive-evaluator-tools:reporter-review
+ARG DEBIAN_IMAGE=debian@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132
+
+FROM ${DEBIAN_IMAGE} AS kernel
+ARG DEBIAN_SNAPSHOT=20260905T000000Z
+RUN sed -i \
+      -e "s|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/|" \
+      -e "s|http://deb.debian.org/debian|http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && printf '%s\n' 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99snapshot \
+  && apt-get update \
+  && apt-get install --no-install-recommends -y \
+      linux-image-amd64=6.12.107-1 \
+      initramfs-tools=0.148.4 \
+      busybox-static=1:1.37.0-6+b8 \
+  && rm -rf /var/lib/apt/lists/*
+
+FROM ${TOOL_IMAGE} AS guest
+USER root
+COPY packages/evaluator-lean/native/reporter-guest-run.sh /usr/local/sbin/evaluator-guest-run
+COPY packages/evaluator-lean/native/reporter-fixtures.mjs /opt/evaluator/bin/reporter-fixtures.mjs
+COPY packages/evaluator-lean/native/evaluator-fixtures.service /etc/systemd/system/evaluator-fixtures.service
+RUN mkdir -p /var/lib/systemd/linger /etc/systemd/system/multi-user.target.wants /work /tmp \
+  && touch /var/lib/systemd/linger/node \
+  && ln -s /etc/systemd/system/evaluator-fixtures.service \
+      /etc/systemd/system/multi-user.target.wants/evaluator-fixtures.service \
+  && printf '%s\n' \
+      'tmpfs /tmp tmpfs rw,nosuid,nodev,noexec,mode=1777,size=64M 0 0' \
+      'tmpfs /work tmpfs rw,nosuid,nodev,exec,mode=0700,uid=1000,gid=1000,size=1536M 0 0' \
+      > /etc/fstab \
+  && chmod 0555 /usr/local/sbin/evaluator-guest-run \
+  && chmod 0444 /etc/systemd/system/evaluator-fixtures.service /etc/fstab /var/lib/systemd/linger/node \
+  && chown root:root /usr/local/sbin/evaluator-guest-run /etc/systemd/system/evaluator-fixtures.service \
+      /etc/fstab /var/lib/systemd/linger/node
+
+FROM ${DEBIAN_IMAGE} AS disk
+ARG DEBIAN_SNAPSHOT=20260905T000000Z
+RUN sed -i \
+      -e "s|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/|" \
+      -e "s|http://deb.debian.org/debian|http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && printf '%s\n' 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99snapshot \
+  && apt-get update \
+  && apt-get install --no-install-recommends -y e2fsprogs=1.47.2-3+b11 \
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=guest / /guest-root/
+COPY --from=kernel /boot/vmlinuz-6.12.107+deb13-amd64 /output/vmlinuz
+COPY --from=kernel /boot/initrd.img-6.12.107+deb13-amd64 /output/initrd.img
+RUN truncate -s 4608M /output/rootfs.ext4 \
+  && mke2fs -q -F -t ext4 -L motive-eval-root -m 0 -d /guest-root /output/rootfs.ext4 \
+  && e2fsck -fn /output/rootfs.ext4 \
+  && sha256sum /output/vmlinuz /output/initrd.img /output/rootfs.ext4 > /output/guest-image-sha256.txt
+
+FROM ${DEBIAN_IMAGE}
+ARG DEBIAN_SNAPSHOT=20260905T000000Z
+RUN sed -i \
+      -e "s|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/|" \
+      -e "s|http://deb.debian.org/debian|http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && printf '%s\n' 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99snapshot \
+  && apt-get update \
+  && apt-get install --no-install-recommends -y qemu-system-x86=1:10.0.11+ds-0+deb13u1 \
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=disk /output/ /guest/
+COPY packages/evaluator-lean/native/run-evaluator-qemu.sh /usr/local/bin/run-evaluator-qemu
+RUN chmod 0555 /usr/local/bin/run-evaluator-qemu \
+  && chmod -R a-w /guest
+LABEL motive.purpose=evaluator-systemd-qemu-review
+USER 65534:65534
+ENTRYPOINT ["/usr/local/bin/run-evaluator-qemu"]

@@ -1,0 +1,69 @@
+# Local state, credentials, and provider metadata
+.local/
+.agents/
+.vercel/
+supabase/.temp/
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+**/.envrc
+*.key
+*.p12
+*.pfx
+
+# Logs and local diagnostics
+*.log
+**/logs/
+**/.debug/
+**/debug-captures/
+**/captures/
+test-results/
+playwright-report/
+coverage/
+.nyc_output/
+
+# Generated artifacts and build output
+artifacts/
+dist/
+build/
+out/
+.cache/
+.turbo/
+.vite/
+**/__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.py[cod]
+*.tsbuildinfo
+node_modules/
+
+# Private handoffs and local data
+.handoffs/
+private-handoffs/
+**/private-handoffs/
+*.private-handoff.*
+/MOTIVE-BACKEND-FINAL-DEV-HANDOFF.md
+/docs/HYPOTHESIS-DEPLOYMENT-HANDOFF.md
+/docs/ACTIVE-TODO-HISTORY-*.md
+*.sqlite
+*.sqlite3
+*.db
+*.db3
+*.dump
+*.sql.gz
+
+# Historical snapshots and packaged archives
+archive/
+archives/
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# Operator-specific deployment helper and generated compatibility transcripts
+/fixtures/compatibility/evidence/
+/scripts/prepare-vercel-source.ts

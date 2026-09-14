@@ -1,0 +1,18 @@
+{
+  "format": "motive.evaluator-cases/0.1",
+  "status": "baseline-exit-behavior-observed",
+  "evidence": "../../packages/evaluator-lean/native/toolchain-build-evidence.json",
+  "deployment_approved": false,
+  "source_directory": "sources",
+  "human_acceptance": "PENDING",
+  "cases": [
+    { "id": "valid-proof", "expected": "verified", "boundary": "comparator" },
+    { "id": "wrong-target-statement", "expected": "reject" },
+    { "id": "incomplete-proof", "expected": "reject" },
+    { "id": "unapproved-custom-axiom", "expected": "reject" },
+    { "id": "transitive-incomplete-dependency", "expected": "reject" },
+    { "id": "altered-challenge", "expected": "reject", "boundary": "source-ingestion" },
+    { "id": "modified-build-or-checker", "expected": "reject", "boundary": "source-ingestion" },
+    { "id": "forged-acceptance-output", "expected": "reject" }
+  ]
+}

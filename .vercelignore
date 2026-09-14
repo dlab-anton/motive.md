@@ -1,0 +1,21 @@
+# Only reviewed application source belongs in a deployment upload.
+.local
+.env*
+.vercel
+.agents
+.claude
+.codex
+node_modules
+dist
+artifacts
+archive
+MOTIVE-HYPOTHESIS-CONTRACT-v0.1
+test-results
+playwright-report
+*.log
+*.dump
+*.sqlite*
+*.db
+*.zip
+*.vhdx
+vendor

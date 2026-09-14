@@ -1,0 +1,135 @@
+FROM motive-control:native-binding-review AS gatewaydeps
+
+FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS codex
+RUN npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.153.4 \
+ && test "$(codex --version)" = "codex-cli 0.153.4"
+COPY packages/runner-codex/src/catalog.ts /catalog.ts
+RUN node -e "import('/catalog.ts').then(m => process.stdout.write(m.serializeLocalMockModelCatalog()))" > /model-catalog.json
+
+FROM debian@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132 AS build
+RUN rm -f /etc/apt/apt.conf.d/docker-clean \
+ && apt-get update \
+ && apt-get install --no-install-recommends -y gcc=4:14.2.0-1 libc6-dev=2.41-12+deb13u3 \
+ && mkdir -p /evidence \
+ && dpkg-query -W -f='${binary:Package}=${Version}\n' | LC_ALL=C sort > /evidence/builder-packages.txt \
+ && find /var/cache/apt/archives -maxdepth 1 -type f -name '*.deb' -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > /evidence/builder-package-sha256.txt
+COPY packages/runner-native/native/worker-launcher.c packages/runner-native/native/worker-runtime-check.c \
+     packages/runner-native/native/setuid-probe.c packages/runner-native/native/capability-envelope.c /src/
+RUN gcc -std=c17 -Wall -Wextra -Werror -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie -Wl,-z,relro,-z,now -o /worker-launcher /src/worker-launcher.c \
+ && gcc -std=c17 -Wall -Wextra -Werror -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie -Wl,-z,relro,-z,now -o /worker-runtime-check /src/worker-runtime-check.c \
+ && gcc -std=c17 -Wall -Wextra -Werror -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie -Wl,-z,relro,-z,now -o /setuid-probe /src/setuid-probe.c \
+ && gcc -std=c17 -Wall -Wextra -Werror -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie -Wl,-z,relro,-z,now -o /capability-envelope /src/capability-envelope.c
+
+FROM debian@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132 AS guest
+ARG DEBIAN_FRONTEND=noninteractive
+RUN rm -f /etc/apt/apt.conf.d/docker-clean \
+ && apt-get update \
+ && apt-get install --no-install-recommends -y \
+      linux-image-amd64=6.12.107-1 initramfs-tools=0.148.4 busybox-static=1:1.37.0-6+b8 \
+      python3=3.13.5-1 nodejs=20.19.2+dfsg-1+deb13u2 \
+      postgresql=17+278 postgresql-17=17.11-0+deb13u1 \
+ && groupadd --gid 1000 motive_controller \
+ && useradd --uid 1000 --gid 1000 --home-dir /var/lib/motive/controller --shell /usr/sbin/nologin motive_controller \
+ && usermod --append --groups postgres motive_controller \
+ && mkdir -p /opt/motive/package-evidence \
+ && dpkg-query -W -f='${binary:Package}=${Version}\n' | LC_ALL=C sort > /opt/motive/package-evidence/guest-packages.txt \
+ && find /var/cache/apt/archives -maxdepth 1 -type f -name '*.deb' -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > /opt/motive/package-evidence/guest-package-sha256.txt \
+ && test "$(basename "$(find /boot -maxdepth 1 -name 'vmlinuz-6.12.*' -print -quit)")" = "vmlinuz-6.12.107+deb13-amd64" \
+ && test "$(id -u motive_controller)" = 1000 \
+ && test "$(id -u postgres)" != 2000 \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb
+COPY --from=build /worker-launcher /worker-runtime-check /setuid-probe /capability-envelope /opt/motive/bin/
+COPY --from=build /evidence/ /opt/motive/package-evidence/
+COPY --from=codex /usr/local/lib/node_modules/@openai/codex /usr/local/lib/node_modules/@openai/codex
+COPY --from=codex /model-catalog.json /opt/motive/codex-config/model-catalog.json
+COPY --from=gatewaydeps /app /opt/motive/gateway
+COPY packages/runner-native/native/joined-qemu-gateway-entry.ts \
+     packages/runner-native/native/joined-qemu-migrate.ts /opt/motive/gateway/packages/runner-native/native/
+COPY packages/runner-native/native/joined-codex-probe.mjs \
+     packages/runner-native/native/test_launcher.py /opt/motive/test/
+COPY packages/runner-native/native/qemu-joined-guest-init.sh /sbin/motive-guest-init
+RUN mkdir -p /run/motive/channels /run/motive/postgres /exchange /var/lib/motive/control \
+      /var/lib/motive/controller /var/lib/motive/postgres /var/lib/motive/worker/tmp /vercel/sandbox/workspace \
+ && ln -s ../lib/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex \
+ && ln -s /var/lib/motive/worker/installation_id /opt/motive/codex-config/installation_id \
+ && printf '%s\n' \
+    'model = "motive-local-mock-v1"' \
+    'model_provider = "motive_mock"' \
+    'model_catalog_json = "/opt/motive/codex-config/model-catalog.json"' \
+    'model_reasoning_effort = "low"' \
+    'model_reasoning_summary = "none"' \
+    'sandbox_mode = "read-only"' \
+    'approval_policy = "never"' \
+    'web_search = "disabled"' \
+    '' \
+    '[features]' \
+    'multi_agent = false' \
+    'multi_agent_v2 = false' \
+    'apps = false' \
+    'plugins = false' \
+    'memories = false' \
+    'goals = false' \
+    'hooks = false' \
+    'shell_snapshot = false' \
+    '' \
+    '[model_providers.motive_mock]' \
+    'name = "Motive deterministic local mock"' \
+    'base_url = "http://127.0.0.1:8080/v1"' \
+    'env_key = "MOTIVE_RUN_CAPABILITY"' \
+    'wire_api = "responses"' \
+    'request_max_retries = 0' \
+    'stream_max_retries = 0' \
+    'supports_websockets = false' > /opt/motive/codex-config/config.toml \
+ && printf 'trusted-controller-channel\n' > /run/motive/channels/controller \
+ && chown -R root:root /opt/motive/bin /opt/motive/test /opt/motive/codex-config /opt/motive/gateway \
+      /opt/motive/package-evidence /run/motive /sbin/motive-guest-init \
+ && chown motive_controller:motive_controller /var/lib/motive/controller \
+ && chmod 0700 /var/lib/motive/controller \
+ && chmod 0555 /opt/motive/bin /opt/motive/test /opt/motive/codex-config /opt/motive/gateway /run/motive/channels \
+ && chmod 0755 /var/lib/motive/control \
+ && chmod 0555 /opt/motive/bin/worker-launcher /opt/motive/bin/worker-runtime-check \
+      /opt/motive/bin/capability-envelope /sbin/motive-guest-init \
+ && chmod 4555 /opt/motive/bin/setuid-probe \
+ && chmod 0444 /opt/motive/test/* /opt/motive/codex-config/config.toml \
+      /opt/motive/codex-config/model-catalog.json /run/motive/channels/controller /opt/motive/package-evidence/* \
+ && chmod -R a-w /opt/motive/gateway
+
+FROM debian@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132 AS disk
+RUN apt-get update \
+ && apt-get install --no-install-recommends -y e2fsprogs=1.47.2-3+b11 \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=guest / /guest-root/
+RUN mkdir -p /output \
+ && cp /guest-root/boot/vmlinuz-6.12.107+deb13-amd64 /output/vmlinuz \
+ && cp /guest-root/boot/initrd.img-6.12.107+deb13-amd64 /output/initrd.img \
+ && truncate -s 3072M /output/rootfs.ext4 \
+ && mke2fs -q -F -t ext4 -L motive-root -m 0 -d /guest-root /output/rootfs.ext4 \
+ && e2fsck -fn /output/rootfs.ext4 \
+ && sha256sum /output/vmlinuz /output/initrd.img /output/rootfs.ext4 > /output/guest-image-sha256.txt
+
+FROM debian@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132
+LABEL motive.purpose=protected-worker-joined-qemu-test
+ARG DEBIAN_FRONTEND=noninteractive
+RUN rm -f /etc/apt/apt.conf.d/docker-clean \
+ && apt-get update \
+ && apt-get install --no-install-recommends -y qemu-system-x86=1:10.0.11+ds-0+deb13u1 \
+ && mkdir -p /guest/package-evidence \
+ && dpkg-query -W -f='${binary:Package}=${Version}\n' | LC_ALL=C sort > /guest/package-evidence/qemu-packages.txt \
+ && find /var/cache/apt/archives -maxdepth 1 -type f -name '*.deb' -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > /guest/package-evidence/qemu-package-sha256.txt \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb
+COPY --from=disk /output/ /guest/
+COPY --from=guest /opt/motive/package-evidence/ /guest/package-evidence/
+COPY packages/runner-native/native/run-qemu-joined-guest.sh /usr/local/bin/run-qemu-joined-guest
+RUN printf '%s\n' \
+      'baseImage=debian@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132' \
+      'dependencyBase=motive-control:native-binding-review@sha256:67c3229c2820a40da9d1852cd5ba346167cdb326c0156b7b8b5ed4acfb56b7f6' \
+      'dependencySchema=001-011' \
+      'kernelPackage=linux-image-amd64=6.12.107-1' \
+      'kernelRelease=6.12.107+deb13-amd64' \
+      'qemuPackage=qemu-system-x86=1:10.0.11+ds-0+deb13u1' \
+      'postgresqlPackage=postgresql=17+278' \
+      'postgresqlServerPackage=postgresql-17=17.11-0+deb13u1' \
+      'codexPackage=@openai/codex@0.153.4' > /guest/package-evidence/pins.txt \
+ && chmod 0555 /usr/local/bin/run-qemu-joined-guest \
+ && chmod -R a-w /guest
+ENTRYPOINT ["/usr/local/bin/run-qemu-joined-guest"]

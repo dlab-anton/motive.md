@@ -1,0 +1,92 @@
+{
+  "format": "hypothesis.hypothesis-context.v1",
+  "channel": {
+    "id": "71111111-1111-4111-8111-111111111111",
+    "name": "synthetic-targeted-context",
+    "goal": "Exercise the bounded targeted hypothesis context contract.",
+    "created_by": "fixture-agent",
+    "updated_by": null,
+    "metadata": null,
+    "created_at": "2026-05-02T03:04:05Z",
+    "updated_at": "2026-05-02T03:04:05Z"
+  },
+  "hypothesis": {
+    "id": "82222222-2222-4222-8222-222222222222",
+    "statement": "The targeted synthetic treatment remains unresolved.",
+    "context": "A deterministic targeted-read fixture.",
+    "falsification_criteria": "A bounded contradictory observation.",
+    "status": "inconclusive",
+    "confidence": 0.35,
+    "initial_confidence": 0.55,
+    "tags": ["synthetic", "targeted"],
+    "created_by": "fixture-agent",
+    "parent_id": null,
+    "is_archived": true,
+    "evidence_counts": {
+      "supporting": 1,
+      "contradicting": 1,
+      "neutral": 2
+    },
+    "deadline": null,
+    "metadata": {"fixture": true},
+    "null_hypothesis": "The treatment has no reliable effect.",
+    "experimental_design": {"kind": "synthetic"},
+    "significance_level": 0.05,
+    "outcome": {"result": "mixed", "replication_required": true},
+    "channel": "synthetic-targeted-context",
+    "created_at": "2026-05-02T03:05:00Z",
+    "updated_at": "2026-05-02T03:06:00Z"
+  },
+  "evidence_page": {
+    "hypothesis_id": "82222222-2222-4222-8222-222222222222",
+    "items": [
+      {
+        "id": "93333333-3333-4333-8333-333333333333",
+        "hypothesis_id": "82222222-2222-4222-8222-222222222222",
+        "content": "The submillisecond observation is newest.",
+        "source": "urn:synthetic:newest",
+        "evidence_type": "supporting",
+        "strength": 0.7,
+        "confidence_after": 0.45,
+        "created_by": "fixture-agent",
+        "created_at": "2026-05-02T03:07:00.123457Z"
+      },
+      {
+        "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "hypothesis_id": "82222222-2222-4222-8222-222222222222",
+        "content": "The higher UUID wins the exact timestamp tie.",
+        "source": null,
+        "evidence_type": "neutral",
+        "strength": null,
+        "confidence_after": null,
+        "created_by": "fixture-agent",
+        "created_at": "2026-05-02T03:07:00.123456Z"
+      },
+      {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "hypothesis_id": "82222222-2222-4222-8222-222222222222",
+        "content": "The lower UUID follows at the same timestamp.",
+        "source": null,
+        "evidence_type": "neutral",
+        "strength": null,
+        "confidence_after": null,
+        "created_by": "fixture-agent",
+        "created_at": "2026-05-02T03:07:00.123456Z"
+      },
+      {
+        "id": "84444444-4444-4444-8444-444444444444",
+        "hypothesis_id": "82222222-2222-4222-8222-222222222222",
+        "content": "The older observation contradicts the prediction.",
+        "source": "urn:synthetic:older",
+        "evidence_type": "contradicting",
+        "strength": 0.8,
+        "confidence_after": 0.35,
+        "created_by": "fixture-agent",
+        "created_at": "2026-05-02T03:07:00.000001Z"
+      }
+    ],
+    "total": 4,
+    "offset": 0,
+    "limit": 20
+  }
+}

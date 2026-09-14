@@ -1,0 +1,23 @@
+FROM node:24.20.0-bookworm-slim@sha256:6642ef280aebc09c4541bee0b15c9f89f0f3f3c247ddee79ae1d37eddfdcbbaa
+
+WORKDIR /app
+
+COPY --chown=node:node package.json package-lock.json .npmrc ./
+RUN npm ci --include=dev --ignore-scripts \
+  && npm cache clean --force
+
+COPY --chown=node:node server ./server
+COPY --chown=node:node migrations ./migrations
+COPY --chown=node:node packages ./packages
+COPY --chown=node:node scripts ./scripts
+COPY --chown=node:node deploy ./deploy
+
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=8080 \
+    NODE_OPTIONS=--enable-source-maps
+
+USER node
+EXPOSE 8080
+
+CMD ["node", "--import", "tsx", "server/control/index.ts"]

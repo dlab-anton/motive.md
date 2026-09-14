@@ -1,0 +1,150 @@
+import { Bell, BellOff, Newspaper } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
+import type { Project } from '@/lib/projects';
+import { Button } from './ui/button';
+import type { SupportControls } from './backing';
+import type { ParticipationMeResponse, ParticipationPublicProjection, ResearchJournalEntry, ResearchJournalPage } from '@/lib/participation';
+import { useProjectResource } from '@/lib/project-api';
+import { journalIdPattern, mergeJournalEntries, readJournalPage, useJournalEntry } from '@/lib/research-journal';
+import { useSubmissionOwnership } from '@/lib/submission-ownership';
+import { ResearchReviewQueues } from './finding-review-queue';
+import { ResearchHandoffs } from './research-handoffs';
+import { researchDigest, researchQuestionExcerpt } from '@/lib/research-digest';
+import { ResearchTaskRecord } from './research-task-record';
+import { QueueNext, TaskAgent, TaskStatusIcon, TaskTime, useMinuteClock } from './task-row-parts';
+
+export function FollowProject({ project, controls }: { project: Project; controls: SupportControls }) {
+  const following = controls.state.following.includes(project.id);
+  return <Button variant="outline" disabled={controls.busy} aria-pressed={following} onClick={async () => {
+    if (await controls.send({ type: 'follow', goal: project.id, following: !following })) {
+      toast(following ? 'Project unfollowed' : 'Project followed', { description: 'Following saves this project to your local workspace. It does not reserve funds or start work.' });
+    }
+  }}>{following ? <BellOff /> : <Bell />}{following ? 'Following' : 'Follow project'}</Button>;
+}
+
+export function ProjectUpdates({ data, me, accountId = null }: { data: ParticipationPublicProjection | null; me: ParticipationMeResponse | null; accountId?: string | null }) {
+  const [view, setView] = useState<'everyone' | 'mine' | 'review'>('everyone');
+  const location = useLocation();
+  // A copied experiment link is public; it may refer to somebody else's work.
+  useEffect(() => { if (location.hash.startsWith('#research-') || location.hash.startsWith('#handoff-') || location.hash === '#active-research') setView('everyone'); }, [location.key, location.hash]);
+  useEffect(() => { if (!me?.canReview && view === 'review') setView('everyone'); }, [me?.canReview, view]);
+  const onlyMine = view === 'mine' && Boolean(me);
+  const reviewing = view === 'review' && Boolean(me?.canReview && accountId);
+  const experiment = new URLSearchParams(location.search).get('experiment');
+  const legacyExperiment = location.hash.startsWith('#research-') ? location.hash.slice('#research-'.length)
+    : location.hash.startsWith('#submission-') ? location.hash.slice('#submission-'.length) : '';
+  const selectedExperiment = experiment && journalIdPattern.test(experiment) ? experiment
+    : journalIdPattern.test(legacyExperiment) ? legacyExperiment : null;
+  if (selectedExperiment) return <ResearchTaskRecord key={selectedExperiment} id={selectedExperiment} me={me} accountId={accountId} />;
+  return <div className="research-journal">
+    <div className="section-heading-row task-list-heading"><h2>Tasks</h2><span className="task-refresh-note">Updates automatically</span>{me ? <select className="journal-view-choice" aria-label="Filter tasks" value={view} onChange={event => setView(event.target.value as typeof view)}><option value="everyone">All agents</option><option value="mine">My agents</option>{me.canReview && accountId ? <option value="review">To assess</option> : null}</select> : null}</div>
+    {reviewing ? <ResearchReviewQueues key={accountId} /> : <JournalEntries key={`${accountId}:${onlyMine ? 'mine' : 'everyone'}`} data={data} me={me} onlyMine={onlyMine} accountId={accountId} />}
+  </div>;
+}
+
+function ExperimentRow({ entry, now }: { entry: ResearchJournalEntry; now: number }) {
+  const digest = researchDigest(entry.update);
+  return <a className="experiment-row task-row task-row-link" href={`/?project=circle-packing&experiment=${entry.submission.id}`}>
+    <TaskAgent name={entry.update.agentName} /><span className="task-main"><strong className="task-title" title={digest.question}>{digest.question}</strong></span>
+    <TaskStatusIcon kind={entry.update.completed && entry.update.assessmentTiming === 'AFTER_CHECK' ? 'complete' : 'needs-update'} /><TaskTime value={entry.submission.createdAt} now={now} />
+  </a>;
+}
+
+function JournalEntries({ data, me, onlyMine, accountId }: { data: ParticipationPublicProjection | null; me: ParticipationMeResponse | null; onlyMine: boolean; accountId: string | null }) {
+  const location = useLocation();
+  const now = useMinuteClock();
+  const lastScrolled = useRef('');
+  const ownPage = useProjectResource<ResearchJournalPage>(onlyMine ? '/api/participation/research-updates' : null);
+  const [history, setHistory] = useState<ResearchJournalEntry[]>([]);
+  const [visibleLimit, setVisibleLimit] = useState(10);
+  // undefined means the first page still owns the continuation cursor.
+  const [cursor, setCursor] = useState<string | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const pending = useRef<AbortController | null>(null);
+  useEffect(() => () => { pending.current?.abort(); }, []);
+  const ownClaims = new Set(me?.assignments.map(item => item.claimId));
+  const summaries = new Map(data?.submissions.map(item => [item.id, item]));
+  const latest: ResearchJournalEntry[] = onlyMine ? ownPage.data?.items ?? [] : (data?.researchUpdates ?? []).flatMap(update => {
+    const submission = summaries.get(update.submissionId);
+    return submission ? [{ update, submission }] : [];
+  });
+  // Keep a stable place once browsing older work. A bounded live head cannot
+  // safely fill every gap if many new experiments arrive between polls.
+  const entries = history.length ? history : latest;
+  const displayed = entries.slice(0, visibleLimit);
+  const hasHidden = displayed.length < entries.length;
+  const newerAvailable = history.length > 0 && latest.some(item => !history.some(older => older.submission.id === item.submission.id));
+  const requestedId = location.hash.startsWith('#research-') ? location.hash.slice('#research-'.length) : '';
+  useEffect(() => { const index = entries.findIndex(item => item.submission.id === requestedId); if (index >= visibleLimit) setVisibleLimit(index + 1); }, [entries, requestedId, visibleLimit]);
+  const focused = useJournalEntry(!onlyMine && journalIdPattern.test(requestedId) && data && !entries.some(item => item.submission.id === requestedId) ? requestedId : null);
+  const ownership = useSubmissionOwnership(onlyMine ? null : accountId,
+    [...entries.map(item => item.submission.id), ...(focused.entry ? [focused.entry.submission.id] : [])]);
+  const updates = entries.map(item => item.update);
+  const visible = updates;
+  const continuation = cursor !== undefined ? cursor : onlyMine ? ownPage.data?.nextCursor ?? null
+    : data && data.totalSubmissions > latest.length ? latest.at(-1)?.submission.id ?? null : null;
+  const loading = !data || onlyMine && !ownPage.data && !ownPage.error;
+  const active = (data?.activeResearchIntents ?? []).filter(item => Date.parse(item.expiresAt) > now && (!onlyMine || ownClaims.has(item.claimId)));
+  const ownActiveClaims = new Set((me?.assignments ?? []).flatMap(item => item.status === 'ACTIVE'
+    && item.completedAt === null && item.claimId && item.expiresAt && Date.parse(item.expiresAt) > now ? [item.claimId] : []));
+  const qualifiedClaimCount = onlyMine ? ownActiveClaims.size
+    : typeof data?.loopProgress?.activeAgents === 'number' ? Math.max(0, data.loopProgress.activeAgents) : null;
+  const unlistedClaimCount = qualifiedClaimCount === null ? null : Math.max(0, qualifiedClaimCount - active.length);
+  const claimSummary = unlistedClaimCount && unlistedClaimCount > 0
+    ? `${unlistedClaimCount}${active.length ? ' additional' : ''} ${unlistedClaimCount === 1 ? 'task' : 'tasks'} claimed.`
+    : !active.length ? qualifiedClaimCount === null ? 'No active questions shared.'
+      : qualifiedClaimCount === 0 ? 'No tasks currently claimed.' : null : null;
+  async function loadOlder() {
+    if (hasHidden) { setVisibleLimit(value => value + 10); return; }
+    if (!continuation || pending.current) return;
+    const controller = new AbortController();
+    pending.current = controller; setBusy(true); setError('');
+    // Keep this exact first page even if newer work arrives while the request runs.
+    const retained = entries;
+    setHistory(retained); setCursor(continuation);
+    try {
+      const page = await readJournalPage(onlyMine, continuation, controller.signal);
+      if (!controller.signal.aborted) { setHistory(mergeJournalEntries(retained, page.items)); setVisibleLimit(value => value + 10); setCursor(page.nextCursor); }
+    } catch (error) {
+      if (!controller.signal.aborted) setError(error instanceof Error ? error.message : 'Older experiments could not be loaded.');
+    } finally {
+      if (!controller.signal.aborted) { pending.current = null; setBusy(false); }
+    }
+  }
+  function resetHistory() { pending.current?.abort(); pending.current = null; setBusy(false); setHistory([]); setVisibleLimit(10); setCursor(undefined); setError(''); }
+  useEffect(() => {
+    if (!journalIdPattern.test(requestedId) && location.hash !== '#active-research') return;
+    const navigation = `${location.key}:${location.hash}`;
+    if (lastScrolled.current === navigation) return;
+    const target = document.getElementById(location.hash.slice(1));
+    if (target && lastScrolled.current !== navigation) {
+      target.scrollIntoView({ block: 'start' }); lastScrolled.current = navigation;
+    }
+  }, [location.key, location.hash, requestedId, entries, focused.entry]);
+  if (!data) return <div className="empty-state"><Newspaper /><h2>Loading the research…</h2></div>;
+  return <>
+    {focused.loading ? <p role="status">Loading the linked experiment…</p> : null}
+    {focused.error ? <div className="journal-load-error" role="alert"><p>{focused.error}</p><Button size="sm" variant="outline" onClick={focused.reload}>Retry experiment</Button></div> : null}
+    {focused.entry ? <p><a className="inline-link" href={`/?project=circle-packing&experiment=${focused.entry.submission.id}`}>Open the linked earlier experiment ↗</a></p> : null}
+    {ownPage.error ? <div className="journal-load-error" role="alert"><p>Your agents’ research could not be refreshed.{ownPage.data ? ' The last loaded page is shown.' : ''}</p><Button size="sm" variant="outline" onClick={ownPage.reload}>Retry my research</Button></div> : null}
+    {ownership.unavailable ? <p className="field-hint">Your contribution labels could not be checked. <button className="inline-link" onClick={ownership.reload}>Retry personal view</button></p> : null}
+    {newerAvailable ? <aside className="journal-new-work" role="status"><span>New experiments are available.</span><Button size="sm" variant="outline" onClick={resetHistory}>Show latest experiments</Button></aside> : null}
+    {loading ? <p role="status">Loading your agents’ experiments…</p> : null}
+    <div className="task-column-head" aria-hidden="true"><span>Agent</span><span>Task</span><span><span className="sr-only">Status</span></span><span>When</span></div>
+    {active.length ? <section className="journal-active task-active-list" id="active-research" aria-label="Current tasks">{active.map(intent => <details key={intent.claimId} className="current-research-question task-row"><summary><TaskAgent name={intent.agentName} /><span className="task-main"><strong className="task-title" title={intent.proposal}>{researchQuestionExcerpt(intent.proposal)}</strong></span><TaskStatusIcon kind="in-progress" /><TaskTime value={intent.declaredAt} now={now} /></summary><div className="task-row-detail"><h3>{intent.proposal}</h3><p><strong>Expected:</strong> {intent.expectation}</p><ul>{intent.conditions.map((condition,index)=><li key={index}>{condition}</li>)}</ul><QueueNext /></div></details>)}</section> : null}
+    {claimSummary ? <p className="task-idle">{claimSummary}</p> : null}
+    <div className="research-stories">{displayed.map(entry => <ExperimentRow key={entry.submission.id} entry={entry} now={now} />)}</div>
+    {!loading && !ownPage.error && !visible.length && !active.length ? <p className="journal-empty">{onlyMine ? 'Your agents haven’t submitted a result yet.'
+      : qualifiedClaimCount && qualifiedClaimCount > 0 ? 'No results have been submitted yet.' : 'No results have been submitted yet. Agents can share a question as soon as they pick up work.'}</p> : null}
+    {visible.length ? <div className="journal-pagination task-pagination">
+      {error ? <p className="action-error" role="alert">{error}</p> : null}
+      <div>{hasHidden || continuation ? <Button variant="ghost" size="sm" disabled={busy} onClick={() => void loadOlder()}>{busy ? 'Loading…' : error ? 'Retry older tasks' : 'Show older tasks'}</Button> : null}
+        {history.length || error ? <Button variant="ghost" onClick={resetHistory}>Return to latest</Button> : null}</div>
+      {history.length ? <p className="field-hint">Your place in the journal is saved. Entries show the review history when loaded; open review details for current status.</p> : null}
+    </div> : null}
+    <ResearchHandoffs data={data} onlyMine={onlyMine} now={now} />
+  </>;
+}

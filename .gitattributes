@@ -1,0 +1,3 @@
+# Preserve the curated launch snapshot byte-for-byte. Migration and research
+# inputs participate in checksum validation; line-ending conversion can break it.
+* -text

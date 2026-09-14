@@ -1,0 +1,26 @@
+{
+  "format": "motive.evaluator-profile/0.1",
+  "profile_id": "p0-lean-comparator-unresolved",
+  "status": "blocked-host-preflight",
+  "required": {
+    "host": "Linux, nonprivileged user",
+    "commands": ["lean", "lake", "landrun", "lean4export", "systemd-run"],
+    "outer_restriction": "systemd-run --user --property=RestrictAddressFamilies=~AF_UNIX",
+    "challenge_and_transitive_imports": "trusted and immutable",
+    "candidate_oleans": "never trusted",
+    "fake_landrun": "forbidden for acceptance"
+  },
+  "unresolved": {
+    "host_image_digest": null,
+    "linux_kernel_version": null,
+    "comparator_commit": null,
+    "landrun_commit_and_digest": null,
+    "lean_version": null,
+    "lake_version": null,
+    "lean4export_version_and_digest": null,
+    "challenge_digest": null,
+    "dependency_lock_digest": null,
+    "permitted_axioms": null,
+    "positive_and_negative_fixture_results": null
+  }
+}

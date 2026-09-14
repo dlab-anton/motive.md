@@ -1,0 +1,67 @@
+{
+  "format": "motive.execution-profile/0.1",
+  "profile_id": "p0-codex-local-mock-linux-x64-0.153.4-r1",
+  "status": "local-mock-verified",
+  "captured_at": "2026-09-06T07:10:55.038Z",
+  "runtime": {
+    "codex_package": "@openai/codex@0.153.4",
+    "codex_npm_integrity": "sha512-wbHDmit7S/YvBGVX1DQmk13xtWblZ2cApeJ/pB7xDZ10Cna+DZc5ij7f0F4OxdsXN4FW1oLT48OpogUI1+8Y2w==",
+    "codex_reported_version": "codex-cli 0.153.4",
+    "codex_source_tag": "rust-v0.153.4",
+    "codex_source_commit": "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a",
+    "base_image": "node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e",
+    "observed_lab_image_digest": "sha256:6e8ce83ae223fedfcea94f8dba8b378bd98527f930625e85dc2e539440480df0"
+  },
+  "provider": {
+    "kind": "deterministic-local-responses-mock",
+    "model": "motive-local-mock-v1",
+    "wire_api": "responses",
+    "request_max_retries": 0,
+    "stream_max_retries": 0,
+    "websocket": false,
+    "authentication": "per-process non-secret fixture token"
+  },
+  "catalog": {
+    "runtime_schema": "Codex ModelInfo at rust-v0.153.4",
+    "serialized_digest": "sha256:67822e7f56474d7d5a94ddeac0dc027c720f463991c736a258f70edd922df1ec",
+    "use_responses_lite": false,
+    "fallback_metadata_used": false
+  },
+  "execution": {
+    "ephemeral": true,
+    "ignore_user_config": true,
+    "ignore_rules": true,
+    "sandbox": "read-only",
+    "jsonl": true,
+    "successful_file_reads": 2,
+    "required_file_reads": 2,
+    "provider_requests": 3,
+    "input_item_counts": [3, 5, 7],
+    "web_search": "disabled",
+    "disabled_features": ["multi_agent", "multi_agent_v2", "apps", "plugins", "memories", "goals", "hooks", "shell_snapshot"],
+    "observed_parallel_tool_calls": true,
+    "git_repository_check": "skipped for isolated temporary fixture"
+  },
+  "container_isolation": {
+    "user": "node",
+    "network": "none during Codex execution",
+    "read_only_rootfs": true,
+    "host_binds": [],
+    "capabilities_dropped": ["ALL"],
+    "no_new_privileges": true,
+    "pids_limit": 64,
+    "memory_bytes": 536870912,
+    "container_removed": true,
+    "lab_image_removed": true
+  },
+  "evidence": {
+    "path": "fixtures/compatibility/evidence/codex-profile-linux-0.153.4.json",
+    "sha256": "ce3222dfd55ca1cede24cc0def1ebd295a7ed1bcf84f3493ee74f1c0d4dd8701"
+  },
+  "claims": {
+    "provider_or_cloud_effects": "none",
+    "money_authorized_usd": "0.000000000000",
+    "money_consumed_usd": "0.000000000000",
+    "scope": "actual Codex CLI, pinned local catalog, regular Responses history, and read-only Linux file-tool execution only"
+  }
+}

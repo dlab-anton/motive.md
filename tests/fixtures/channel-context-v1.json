@@ -1,0 +1,139 @@
+{
+  "format": "hypothesis.channel-context.v1",
+  "channel": {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "name": "synthetic-context",
+    "goal": "Exercise the bounded channel context contract.",
+    "created_by": "fixture-agent",
+    "updated_by": null,
+    "metadata": null,
+    "created_at": "2026-01-02T03:04:05Z",
+    "updated_at": "2026-01-02T03:04:05Z"
+  },
+  "active_hypotheses": {
+    "items": [
+      {
+        "id": "22222222-2222-4222-8222-222222222222",
+        "statement": "The synthetic treatment has a measurable effect.",
+        "context": null,
+        "falsification_criteria": null,
+        "status": "draft",
+        "confidence": null,
+        "initial_confidence": null,
+        "tags": [],
+        "created_by": "fixture-agent",
+        "parent_id": null,
+        "is_archived": false,
+        "evidence_counts": {
+          "supporting": 0,
+          "contradicting": 0,
+          "neutral": 1
+        },
+        "deadline": null,
+        "metadata": null,
+        "null_hypothesis": null,
+        "experimental_design": null,
+        "significance_level": null,
+        "outcome": null,
+        "channel": "synthetic-context",
+        "created_at": "2026-01-02T03:05:00Z",
+        "updated_at": "2026-01-02T03:06:00Z"
+      }
+    ],
+    "total": 1,
+    "offset": 0,
+    "limit": 6
+  },
+  "archived_hypotheses": {
+    "items": [
+      {
+        "id": "33333333-3333-4333-8333-333333333333",
+        "statement": "The synthetic control always improves the result.",
+        "context": "A deliberately concluded negative fixture.",
+        "falsification_criteria": "Any non-improving run.",
+        "status": "inconclusive",
+        "confidence": 0.2,
+        "initial_confidence": 0.6,
+        "tags": ["synthetic", "negative"],
+        "created_by": "fixture-agent",
+        "parent_id": null,
+        "is_archived": true,
+        "evidence_counts": {
+          "supporting": 0,
+          "contradicting": 1,
+          "neutral": 0
+        },
+        "deadline": null,
+        "metadata": {"fixture": true},
+        "null_hypothesis": "The control has no reliable effect.",
+        "experimental_design": null,
+        "significance_level": 0.05,
+        "outcome": {"result": "negative", "replication_required": true},
+        "channel": "synthetic-context",
+        "created_at": "2026-01-02T03:05:30Z",
+        "updated_at": "2026-01-02T03:07:00Z"
+      }
+    ],
+    "total": 1,
+    "offset": 0,
+    "limit": 6
+  },
+  "insights": {
+    "items": [
+      {
+        "id": "44444444-4444-4444-8444-444444444444",
+        "channel": "synthetic-context",
+        "insight_type": "pattern",
+        "content": "Negative and neutral observations remain useful context.",
+        "created_by": "fixture-agent",
+        "updated_by": null,
+        "metadata": null,
+        "created_at": "2026-01-02T03:08:00Z",
+        "updated_at": "2026-01-02T03:08:00Z"
+      }
+    ],
+    "total": 1,
+    "offset": 0,
+    "limit": 20
+  },
+  "evidence_pages": [
+    {
+      "hypothesis_id": "22222222-2222-4222-8222-222222222222",
+      "items": [
+        {
+          "id": "55555555-5555-4555-8555-555555555555",
+          "hypothesis_id": "22222222-2222-4222-8222-222222222222",
+          "content": "The pilot was descriptive and did not test direction.",
+          "source": null,
+          "evidence_type": "neutral",
+          "strength": null,
+          "confidence_after": null,
+          "created_by": "fixture-agent",
+          "created_at": "2026-01-02T03:09:00Z"
+        }
+      ],
+      "total": 1,
+      "offset": 0,
+      "limit": 20
+    },
+    {
+      "hypothesis_id": "33333333-3333-4333-8333-333333333333",
+      "items": [
+        {
+          "id": "66666666-6666-4666-8666-666666666666",
+          "hypothesis_id": "33333333-3333-4333-8333-333333333333",
+          "content": "The observed effect was below the stated threshold.",
+          "source": "urn:synthetic:negative-result",
+          "evidence_type": "contradicting",
+          "strength": 0.8,
+          "confidence_after": 0.2,
+          "created_by": "fixture-agent",
+          "created_at": "2026-01-02T03:10:00Z"
+        }
+      ],
+      "total": 1,
+      "offset": 0,
+      "limit": 20
+    }
+  ]
+}

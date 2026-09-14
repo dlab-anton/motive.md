@@ -1,0 +1,48 @@
+{
+  "format": "motive.csqv.reference-provenance.v1",
+  "project": "circle-packing",
+  "n": 101,
+  "frozen_at": "2026-09-07T09:20:16Z",
+  "attribution": "Wes Sander, MoltFire",
+  "source": {
+    "repository": "https://github.com/ucsandman/discovery-loop",
+    "commit": "80f08aa72d9d85d7d9d2a871825b46bdec471bb2",
+    "path": "best/pck/csqv101.json",
+    "permalink": "https://github.com/ucsandman/discovery-loop/blob/80f08aa72d9d85d7d9d2a871825b46bdec471bb2/best/pck/csqv101.json",
+    "raw_sha256": "257fcd9b51a9916a1bbb0bf1f1b06050663a8597513ee0330365b1892e8300f4",
+    "license_status": "No repository license was documented when this reference was frozen; permission and reuse terms remain a pre-spend review item."
+  },
+  "conversion": {
+    "script": "scripts/convert-csqv101-reference.ts",
+    "script_sha256": "7941f5b3b970af948fd4d6a4136c2b5d0ebd994da025f9d055056a6a2896f8e4",
+    "method": "Preserve each source JSON decimal lexeme as a witness string; do not pass through IEEE-754 numbers.",
+    "witness_sha256": "4ac26276b59f1978b86d100df831863a23df1d7756baba3ad542d3004afb575e"
+  },
+  "benchmark_context": {
+    "paper": {
+      "url": "https://arxiv.org/html/2609.05093v1",
+      "version": "v1",
+      "printed_n101": "5.289154",
+      "role": "Historical six-decimal context, not the project acceptance threshold.",
+      "captured_at": "2026-09-07T08:50:17Z",
+      "capture_sha256": "54fa56fd814a29bfe3ef04a01b9c7bfa26366c044f25799fac4f90c32588c237"
+    },
+    "packomania": {
+      "url": "https://packomania.com/csqv/csqv.html",
+      "page_updated": "2026-09-04",
+      "retrieved_at": "2026-09-07T08:50:17Z",
+      "listed_n101": "5.291095185474",
+      "capture_sha256": "b26805495fc62dd5a43795d4992dafb21bdd58d42759933ba7437a14963dad49"
+    }
+  },
+  "validator": {
+    "path": "src/lib/circle-packing.ts",
+    "sha256": "a2f9904fe0359edda76b41b6c840b2ff219288c9cb8671d85376c1b1c0693559"
+  },
+  "exact_local_check": {
+    "objective": "5.29109518547430697",
+    "minimum_boundary_slack": "0.00000000000000997",
+    "minimum_squared_pair_slack": "0.000000000000003477013175446099633184",
+    "official": false
+  }
+}

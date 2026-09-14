@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1
+
+ARG BUILD_IMAGE=golang:1.25.1-bookworm@sha256:c423747fbd96fd8f0b1102d947f51f9b266060217478e5f9bf86f145969562ee
+ARG TOOL_IMAGE=motive-evaluator-tools:pinned-review
+
+FROM ${BUILD_IMAGE} AS build
+WORKDIR /build
+COPY packages/evaluator-lean/native/landrun-namespace-wrapper.c .
+COPY packages/evaluator-lean/native/descendant-probe.c .
+COPY packages/evaluator-lean/native/workload-marker.c .
+RUN cc -std=c11 -O2 -Wall -Wextra -Werror -static-pie \
+      -o /out-landrun-namespace-wrapper landrun-namespace-wrapper.c \
+  && cc -std=c11 -O2 -Wall -Wextra -Werror -static-pie \
+      -DUNSHARE_PATH='"/opt/evaluator/bin/namespace-does-not-exist"' \
+      -o /out-landrun-namespace-wrapper-failure landrun-namespace-wrapper.c \
+  && cc -std=c11 -O2 -Wall -Wextra -Werror -static-pie \
+      -o /out-descendant-probe descendant-probe.c \
+  && cc -std=c11 -O2 -Wall -Wextra -Werror -static-pie \
+      -o /out-workload-marker workload-marker.c
+
+FROM ${TOOL_IMAGE}
+USER root
+COPY --from=build /out-landrun-namespace-wrapper /opt/evaluator/bin/landrun-namespace-wrapper
+COPY --from=build /out-landrun-namespace-wrapper-failure /opt/evaluator/bin/landrun-namespace-wrapper-failure
+COPY --from=build /out-descendant-probe /opt/evaluator/bin/descendant-probe
+COPY --from=build /out-workload-marker /opt/evaluator/bin/workload-marker
+COPY packages/evaluator-lean/native/run-fixtures-namespaced.sh /opt/evaluator/bin/run-fixtures
+COPY packages/evaluator-lean/native/landrun-namespace-wrapper.c /opt/evaluator/identities/landrun-namespace-wrapper.c
+COPY packages/evaluator-lean/src/contract.ts /opt/evaluator/policy/packages/evaluator-lean/src/contract.ts
+COPY fixtures/evaluator/sources/forged-acceptance-output/Solution.lean /opt/evaluator/fixtures/sources/forged-acceptance-output/Solution.lean
+RUN chmod 0555 \
+      /opt/evaluator/bin/landrun-namespace-wrapper \
+      /opt/evaluator/bin/landrun-namespace-wrapper-failure \
+      /opt/evaluator/bin/descendant-probe \
+      /opt/evaluator/bin/workload-marker \
+      /opt/evaluator/bin/run-fixtures \
+  && chmod 0444 \
+      /opt/evaluator/identities/landrun-namespace-wrapper.c \
+      /opt/evaluator/policy/packages/evaluator-lean/src/contract.ts \
+      /opt/evaluator/fixtures/sources/forged-acceptance-output/Solution.lean \
+  && cd /opt/evaluator/fixtures \
+  && find . -type f ! -name fixture-manifest.sha256 -print0 | sort -z | xargs -0 sha256sum > fixture-manifest.sha256 \
+  && chmod 0444 fixture-manifest.sha256
+LABEL motive.namespace-wrapper-experiment="pr78-head-14b5039-reviewed-invocation" \
+      motive.stock-comparator-commit="2312244ac716564a61cc0bf4e107d9abf1757a61"
+USER node

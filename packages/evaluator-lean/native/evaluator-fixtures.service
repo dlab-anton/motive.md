@@ -1,0 +1,16 @@
+[Unit]
+Description=Motive pinned evaluator behavioral fixtures
+Wants=user-runtime-dir@1000.service user@1000.service
+After=user-runtime-dir@1000.service user@1000.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/evaluator-guest-run
+ExecStopPost=/usr/bin/systemctl --no-block poweroff
+TimeoutStartSec=20min
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
+

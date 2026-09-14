@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1
+
+ARG BUILD_IMAGE=golang:1.25.1-bookworm@sha256:c423747fbd96fd8f0b1102d947f51f9b266060217478e5f9bf86f145969562ee
+ARG TEST_IMAGE=motive-control:runtime-report-review
+
+FROM ${BUILD_IMAGE} AS build
+COPY packages/evaluator-lean/native/motive-facts-finalizer.c /src/motive-facts-finalizer.c
+RUN mkdir -p /out \
+  && cc -std=c17 -O2 -Wall -Wextra -Werror -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie \
+      -Wl,-z,relro,-z,now /src/motive-facts-finalizer.c -o /out/motive-facts-finalizer \
+  && chmod 0555 /out/motive-facts-finalizer
+
+FROM ${TEST_IMAGE}
+USER root
+COPY --from=build /out/motive-facts-finalizer /opt/motive/bin/motive-facts-finalizer
+COPY packages/evaluator-lean/src /app/packages/evaluator-lean/src
+COPY packages/evaluator-lean/native/motive-facts-finalizer-linux.test.ts /app/packages/evaluator-lean/native/motive-facts-finalizer-linux.test.ts
+COPY packages/domain/src/contracts.ts /app/packages/domain/src/contracts.ts
+COPY packages/artifact-storage/src/sealer.ts /app/packages/artifact-storage/src/sealer.ts
+ENV MOTIVE_FACTS_FINALIZER=/opt/motive/bin/motive-facts-finalizer \
+    MOTIVE_FACTS_FINALIZER_REHEARSAL=1
+ENTRYPOINT ["./node_modules/.bin/vitest", "run", "packages/evaluator-lean/native/motive-facts-finalizer-linux.test.ts", "--no-file-parallelism"]

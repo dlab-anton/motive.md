@@ -1,0 +1,7 @@
+FROM node:24-bookworm-slim@sha256:6642ef280aebc09c4541bee0b15c9f89f0f3f3c247ddee79ae1d37eddfdcbbaa AS build
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev python3 && rm -rf /var/lib/apt/lists/*
+COPY collector.c /src/collector.c
+RUN mkdir -p /opt/motive && gcc -std=c17 -Wall -Wextra -Werror -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie -Wl,-z,relro,-z,now -o /opt/motive/collector /src/collector.c
+COPY test_collector.py /opt/motive/test_collector.py
+USER node
+ENTRYPOINT ["python3", "/opt/motive/test_collector.py"]

@@ -1,0 +1,79 @@
+# syntax=docker/dockerfile:1
+
+# A new, local-only derived image.  It does not change the historical QEMU
+# reporter evidence image or its guest artifacts.
+ARG BUILD_IMAGE=golang:1.25.1-bookworm@sha256:c423747fbd96fd8f0b1102d947f51f9b266060217478e5f9bf86f145969562ee
+ARG TOOL_IMAGE=motive-evaluator-tools:reporter-review
+ARG BASE_QEMU_IMAGE=motive-evaluator-systemd-qemu:reporter-review
+
+FROM ${BUILD_IMAGE} AS build
+COPY packages/evaluator-lean/native/motive-evaluator-frame-command.c /src/motive-evaluator-frame-command.c
+COPY packages/evaluator-lean/native/motive-evaluator-qemu-frame-proxy.c /src/motive-evaluator-qemu-frame-proxy.c
+COPY packages/evaluator-lean/native/motive-facts-finalizer.c /src/motive-facts-finalizer.c
+RUN mkdir -p /out \
+  && cc -std=c17 -O2 -Wall -Wextra -Werror -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie \
+      -Wl,-z,relro,-z,now /src/motive-evaluator-frame-command.c -o /out/evaluator-frame-command \
+  && cc -std=c17 -O2 -Wall -Wextra -Werror -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie \
+      -Wl,-z,relro,-z,now /src/motive-facts-finalizer.c -o /out/motive-facts-finalizer \
+  && cc -std=c17 -O2 -Wall -Wextra -Werror -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE -static-pie \
+      -Wl,-z,relro,-z,now /src/motive-evaluator-qemu-frame-proxy.c -o /out/evaluator-launcher \
+  && mkdir -p /out/controlfs/lib \
+  && cp /usr/sbin/mke2fs /out/controlfs/mke2fs \
+  && cp /etc/mke2fs.conf /out/controlfs/mke2fs.conf \
+  && cp -L /usr/lib/x86_64-linux-gnu/libext2fs.so.2 /out/controlfs/lib/libext2fs.so.2 \
+  && cp -L /usr/lib/x86_64-linux-gnu/libcom_err.so.2 /out/controlfs/lib/libcom_err.so.2 \
+  && cp -L /usr/lib/x86_64-linux-gnu/libblkid.so.1 /out/controlfs/lib/libblkid.so.1 \
+  && cp -L /usr/lib/x86_64-linux-gnu/libuuid.so.1 /out/controlfs/lib/libuuid.so.1 \
+  && cp -L /usr/lib/x86_64-linux-gnu/libe2p.so.2 /out/controlfs/lib/libe2p.so.2 \
+  && chmod 0555 /out/evaluator-frame-command /out/motive-facts-finalizer /out/evaluator-launcher
+
+FROM ${TOOL_IMAGE} AS guest
+USER root
+COPY --from=build /out/evaluator-frame-command /opt/motive/bin/evaluator-frame-command
+COPY --from=build /out/motive-facts-finalizer /opt/motive/bin/motive-facts-finalizer
+COPY packages/evaluator-lean/native/motive-stage-sealed-source.mjs /opt/motive/bin/motive-stage-sealed-source
+COPY packages/evaluator-lean/native/motive-evaluator-frame.service /etc/systemd/system/motive-evaluator-frame.service
+COPY packages/evaluator-lean/native/motive-evaluator-frame.fstab /etc/fstab
+COPY packages/evaluator-lean/native/motive-evaluator-source-policy.json /etc/motive/evaluator-source-policy.json
+COPY packages/evaluator-lean/native/motive-evaluator-frame-tmpfiles.conf /etc/tmpfiles.d/motive-evaluator-frame.conf
+RUN mkdir -p /etc/motive /opt/motive/bin /opt/evaluator/trusted-template /var/lib/motive /var/lib/systemd/linger \
+      /etc/systemd/system/multi-user.target.wants /work /tmp \
+  && test "$(tail -c 1 /etc/motive/evaluator-source-policy.json | od -An -t u1 | tr -d ' ')" = 10 \
+  && truncate -s -1 /etc/motive/evaluator-source-policy.json \
+  && cp /opt/evaluator/fixtures/sources/Challenge.lean /opt/evaluator/trusted-template/Challenge.lean \
+  && cp /opt/evaluator/fixtures/sources/lakefile.toml /opt/evaluator/trusted-template/lakefile.toml \
+  && cp /opt/evaluator/fixtures/sources/comparator.json /opt/evaluator/trusted-template/comparator.json \
+  && touch /var/lib/systemd/linger/node \
+  && ln -s /etc/systemd/system/motive-evaluator-frame.service \
+      /etc/systemd/system/multi-user.target.wants/motive-evaluator-frame.service \
+  && chown -R root:root /etc/motive /opt/motive /opt/evaluator/trusted-template /var/lib/motive /var/lib/systemd/linger/node \
+  && chmod 0755 /etc/motive /opt/motive /opt/motive/bin \
+  && chmod 0555 /opt/evaluator/trusted-template \
+  && chmod 0444 /opt/evaluator/trusted-template/* \
+  && chmod 0700 /var/lib/motive \
+  && chmod 0555 /opt/motive/bin/evaluator-frame-command /opt/motive/bin/motive-facts-finalizer \
+      /opt/motive/bin/motive-stage-sealed-source \
+  && chmod 0444 /etc/motive/evaluator-source-policy.json /etc/fstab /etc/tmpfiles.d/motive-evaluator-frame.conf \
+      /etc/systemd/system/motive-evaluator-frame.service /var/lib/systemd/linger/node
+
+FROM ${BASE_QEMU_IMAGE} AS base-qemu
+
+FROM ${BUILD_IMAGE} AS disk
+COPY --from=guest / /guest-root/
+COPY --from=base-qemu /guest/vmlinuz /output/vmlinuz
+COPY --from=base-qemu /guest/initrd.img /output/initrd.img
+RUN truncate -s 4608M /output/rootfs.ext4 \
+  && mke2fs -q -F -t ext4 -L motive-eval-frame-root -m 0 -d /guest-root /output/rootfs.ext4 \
+  && e2fsck -fn /output/rootfs.ext4 \
+  && sha256sum /output/vmlinuz /output/initrd.img /output/rootfs.ext4 > /output/guest-image-sha256.txt
+
+FROM base-qemu
+USER root
+COPY --from=disk /output/ /guest/
+COPY --from=build /out/evaluator-launcher /opt/motive/bin/evaluator-launcher
+COPY --from=build /out/controlfs/ /opt/motive/controlfs/
+RUN chown -R root:root /opt/motive/bin/evaluator-launcher /opt/motive/controlfs \
+  && chmod 0555 /opt/motive/bin/evaluator-launcher /opt/motive/controlfs/mke2fs \
+  && chmod 0444 /opt/motive/controlfs/mke2fs.conf /opt/motive/controlfs/lib/*
+LABEL motive.purpose=evaluator-frame-qemu-local-rehearsal
+ENTRYPOINT ["/opt/motive/bin/evaluator-launcher"]
