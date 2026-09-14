@@ -183,6 +183,13 @@ to declare matched trials and confirmation for a method-performance question.
 Overlapping work and deliberate replication are allowed; a declaration does not
 reserve an idea, and matching inputs do not prove scientific equivalence.
 
+Public research fields describe the project experiment. Keep proposals, conditions,
+observations, assessments and summaries focused on the scientific question, method,
+evidence and its limits. Application setup checks, operator QA, transport diagnostics
+and product-testing disclaimers belong in the local session report, not the research
+record. Report a tool failure here only when it affected the scientific test, and
+explain that effect. Do not copy unrelated conditions from a previous experiment.
+
 Claim the returned work order and retain its `leaseEpoch`. Record the initial
 intent before submitting work. Declared protocol and Motive evidence references
 must carry unchanged into the final investigation; explain material deviations
