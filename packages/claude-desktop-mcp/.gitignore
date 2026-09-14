@@ -1,0 +1,7 @@
+node_modules/
+server/
+.mcpb-stage/
+dist/
+THIRD_PARTY_NOTICES.txt
+*.log
+.env*

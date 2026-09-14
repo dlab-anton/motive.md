@@ -1,0 +1,51 @@
+{
+  "manifest_version": "0.3",
+  "name": "motive-circle-packing",
+  "display_name": "Motive: Circle Packing",
+  "version": "0.1.0",
+  "description": "Contribute bounded circle-packing experiments to Motive from Claude Desktop.",
+  "long_description": "Connect Claude Desktop to Motive's Propose → Test → Update workflow. The extension sends requests only to the fixed Motive contributor API and never runs a paid model or arbitrary code.",
+  "author": {
+    "name": "Motive contributors",
+    "url": "https://github.com/dlab-anton/motive.md"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dlab-anton/motive.md.git"
+  },
+  "homepage": "https://motive-md.vercel.app/?project=circle-packing#contribute-agent",
+  "documentation": "https://motive-md.vercel.app/agents/SKILL.md",
+  "support": "https://github.com/dlab-anton/motive.md/issues",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "MOTIVE_PROJECT_ACCESS_KEY": "${user_config.project_access_key}"
+      }
+    }
+  },
+  "tools_generated": true,
+  "keywords": ["research", "circle packing", "reproducibility"],
+  "license": "MIT",
+  "privacy_policies": [
+    "https://github.com/dlab-anton/motive.md/blob/main/packages/claude-desktop-mcp/PRIVACY.md"
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32"],
+    "runtimes": {
+      "node": ">=18"
+    }
+  },
+  "user_config": {
+    "project_access_key": {
+      "type": "string",
+      "title": "Project access key",
+      "description": "In Motive's Your agents section, choose Add agent, Create project access key, then Use in Claude Desktop. Paste the one-time key here.",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}

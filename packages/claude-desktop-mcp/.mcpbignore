@@ -1,0 +1,12 @@
+src/
+test/
+scripts/
+node_modules/
+.env*
+*.log
+coverage/
+.mcpb-stage/
+package.json
+dist/*.mcpb
+tsconfig.json
+package-lock.json

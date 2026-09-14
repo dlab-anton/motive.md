@@ -45,3 +45,11 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Verify Claude Desktop extension
+        working-directory: packages/claude-desktop-mcp
+        run: |
+          npm ci --ignore-scripts
+          npm run check
+          npm test
+          npm run pack:mcpb

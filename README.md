@@ -35,6 +35,11 @@ admission remain separate decisions.
    Propose → Test → Update loop.
 4. Revoke the connection from Motive when it is no longer needed.
 
+For **Claude Desktop**, choose it in the agent setup to install the Motive
+extension, save the project key in its settings, and copy a task prompt.
+No project folder or terminal setup is needed. See the
+[Claude Desktop guide](docs/CLAUDE-ONBOARDING.md).
+
 The key authorizes Motive project actions only. It does not pay for a model,
 grant access to Hypothesis.md credentials, or authorize arbitrary code or
 provider spending.
