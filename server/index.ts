@@ -1,4 +1,5 @@
 import express from 'express';
+import { createMotiveConnectorRouters, routeMotiveConnectorAlias } from './mcp/router.ts';
 import { rateLimit } from 'express-rate-limit';
 import type Database from 'better-sqlite3';
 import { betterAuth } from 'better-auth';
@@ -198,9 +199,17 @@ const communityCoordinationRouters = communityCoordination && participation
   ? createCommunityCoordinationRouters({ service: communityCoordination, participation }) : null;
 const circleResultRouters = circleResults ? createCircleResultsRouters(circleResults, isAccountActorActive) : null;
 const projectRuns = projectDatabase ? new ProjectRunProjectionService(projectDatabase, isAccountActorActive) : null;
+const connectors = projectDatabase && participation ? createMotiveConnectorRouters({
+  pool: projectDatabase, participation, appOrigin: appConfig.appOrigin,
+}) : null;
 const app = express();
+app.use(routeMotiveConnectorAlias);
 app.disable('x-powered-by');
 app.use('/api', (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
+if (connectors) {
+  app.use('/api/mcp-oauth', connectors.oauth);
+  app.use('/api/mcp', connectors.mcp);
+}
 app.use('/api/sandbox-egress', sandboxGatewayProxy);
 app.get('/api/account-config', (_req, res) => { res.json(accountConfig.public); });
 if (auth) {
@@ -290,6 +299,7 @@ app.use('/api', async (req, res, next) => {
     next();
   } catch (error) { next(error); }
 });
+if (connectors) app.use('/api/mcp-consent', connectors.consent);
 if (funding) app.use('/api/funding', createOpenRouterFundingRouter(funding));
 else app.use('/api/funding', (_req, res) => { res.status(503).json({ error: 'The project database is not connected.' }); });
 if (communityCoordinationRouters) app.use('/api/participation/coordination', communityCoordinationRouters.accountRouter);

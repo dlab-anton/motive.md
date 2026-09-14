@@ -1,5 +1,6 @@
+import { readPendingConnectorReturn } from './lib/motive-connector-return';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { CircleHelp, Command } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -28,9 +29,15 @@ const repositoryUrl = configuredRepository && /^https:\/\/github\.com\/[A-Za-z0-
 const AuthDialog = lazy(() => import('@/components/auth-dialog').then(module => ({ default: module.AuthDialog })));
 const AccountPages = lazy(() => import('@/components/account-pages').then(module => ({ default: module.AccountPages })));
 
+const MotiveConnectorConsent = lazy(() => import('./components/motive-connector-consent').then(module => ({ default: module.MotiveConnectorConsent })));
+
 export default function App() {
+  const location = useLocation();
   const { data, isPending } = authClient.useSession();
   if (isPending) return <div className="shell-loading" role="status">Loading motive.md…</div>;
+  if (location.pathname === '/connect/motive') return <Suspense fallback={<div className="shell-loading" role="status">Loading connection…</div>}><MotiveConnectorConsent user={data?.user ?? null} /></Suspense>;
+  const connectorReturn = data?.user && location.pathname === '/' && !location.search && !location.hash ? readPendingConnectorReturn() : null;
+  if (connectorReturn) return <Navigate to={connectorReturn} replace />;
   return <Workspace key={data?.user.id ?? 'guest'} user={data?.user ?? null} />;
 }
 

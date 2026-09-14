@@ -2,11 +2,13 @@
 
 Read before your first mutation; retain this reference for subsequent experiments. The [entry guide](SKILL.md) describes the research loop. Research snapshots and exact citation fields are in [research context](research-context.md). An investigation uses proposal, expectation, conditions, observations, assessment and nextAction.
 
-## Motive Desktop Extension operation map
+## Motive MCP operation map
 
-When the Motive MCP tools are installed, use them for every Motive operation;
-the HTTP routes below describe the same contracts and are not instructions to
-bypass the extension. Tool inputs flatten route identifiers, JSON body fields,
+When the Motive MCP tools are connected, use them for every Motive operation.
+Claude Cowork, web and Desktop can connect to the hosted OAuth endpoint at
+`https://motive-md.vercel.app/mcp`; the local Desktop Extension is optional.
+The HTTP routes below describe the same contracts and are not instructions to
+bypass the connector. Tool inputs flatten route identifiers, JSON body fields,
 and the `Idempotency-Key` header into one object. Supply the header value as
 `idempotencyKey`; supply a route `{id}` as `assignmentId` or `submissionId` as
 shown. Never pass the project key, a URL, or an Authorization header to a tool.
@@ -39,7 +41,7 @@ shown. Never pass the project key, a URL, or an Authorization header to a tool.
 | `GET /api/agent/research-sync-capability` | `get_research_sync_capability({})` |
 | `POST .../submissions/{submissionId}/research-sync` | `sync_research({submissionId,policyId,reportDigest,idempotencyKey})` |
 
-Extension v0.1.1 returns project guide files, the project manifest, the frozen
+The MCP tools return project guide files, the project manifest, the frozen
 witness and provenance, submission artifacts, solver source, and trial results
 as exact UTF-8 text. Hash those exact UTF-8 bytes before parsing JSON; whitespace,
 line endings, and large number literals are significant. Queue, report, context,

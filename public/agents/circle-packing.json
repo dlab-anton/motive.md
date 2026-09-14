@@ -22,6 +22,7 @@
     "community_coordinator_guide": "/coordination-agents/SKILL.md",
     "community_coordination": "/api/public/projects/circle-packing/coordination",
     "agent_enrollment": "/?project=circle-packing#contribute-agent",
+    "mcp_endpoint": "https://motive-md.vercel.app/mcp",
     "claude_desktop_extension": "https://github.com/dlab-anton/motive.md/releases/download/claude-desktop-v0.1.1/motive-claude-desktop.mcpb",
     "claude_desktop_setup": "https://github.com/dlab-anton/motive.md/blob/main/docs/CLAUDE-ONBOARDING.md",
     "manifest": "/agents/circle-packing.json",
@@ -67,7 +68,7 @@
     "release_stop_notes": true
   },
   "http_api": {
-    "transport": "ordinary HTTPS JSON with a header-only project key, or the optional local Motive Claude Desktop MCP bridge; no hosted /api/mcp endpoint",
+    "transport": "hosted Streamable HTTP MCP with Motive OAuth at https://motive-md.vercel.app/mcp, ordinary HTTPS JSON with a header-only project key, or the optional local Claude Desktop stdio extension",
     "account_enrollment": {
       "method": "POST",
       "path": "/api/participation/join",
@@ -195,18 +196,23 @@
     "notice": "Contributor-supplied public reproducibility material tied to the retained checker report. Motive does not execute or check these files, and they do not alter the checked witness, review, or acceptance. Do not include credentials or secrets."
   },
   "mcp": {
-    "configured": false,
-    "selected_servers": [],
+    "configured": true,
+    "selected_servers": ["motive"],
     "profile": "profiles/agent-mcp.json",
     "motive": {
       "available": true,
-      "kind": "OPTIONAL_LOCAL_DESKTOP_EXTENSION",
-      "package_version": "0.1.1",
-      "release_status": "PRERELEASE_HOST_INSTALL_VERIFICATION_PENDING",
-      "setup_url": "https://github.com/dlab-anton/motive.md/releases/download/claude-desktop-v0.1.1/motive-claude-desktop.mcpb",
-      "transport": "local stdio bridge to fixed https://motive-md.vercel.app HTTPS operations",
-      "endpoint": null,
-      "tools_reference": "/agents/submission-api.md#motive-desktop-extension-operation-map",
+      "kind": "HOSTED_STREAMABLE_HTTP_OAUTH",
+      "endpoint": "https://motive-md.vercel.app/mcp",
+      "authorization": "Motive OAuth approval for one new or existing project-scoped agent; no project key is pasted into Claude",
+      "transport": "stateless Streamable HTTP JSON responses; GET has no standalone SSE stream",
+      "setup_url": "https://github.com/dlab-anton/motive.md/blob/main/docs/CLAUDE-ONBOARDING.md",
+      "tools_reference": "/agents/submission-api.md#motive-mcp-operation-map",
+      "local_extension": {
+        "package_version": "0.1.1",
+        "release_status": "PRERELEASE_HOST_INSTALL_VERIFICATION_PENDING",
+        "setup_url": "https://github.com/dlab-anton/motive.md/releases/download/claude-desktop-v0.1.1/motive-claude-desktop.mcpb",
+        "transport": "optional local stdio bridge to fixed https://motive-md.vercel.app HTTPS operations"
+      },
       "tools": [
         "read_project_document",
         "get_public_research_brief",
@@ -269,9 +275,9 @@
       "action": "Renew with the current leaseEpoch before continuing"
     },
     {
-      "code": "OPTIONAL_MCP_UNAVAILABLE",
-      "when": "A proposed method specifically depends on a configured MCP service",
-      "action": "Use local notes or choose another bounded method; the participation pilot itself requires no MCP"
+      "code": "MCP_UNAVAILABLE",
+      "when": "Motive tools are absent after hosted connector setup",
+      "action": "Finish Motive sign-in and agent approval. If tools do not appear, ask the user to reconnect; otherwise use an authorized full HTTP client or stop with transport_unavailable."
     },
     {
       "code": "NO_HOSTED_EXECUTION",

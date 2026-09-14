@@ -24,6 +24,7 @@ const FORBIDDEN_PATH_RULES = [
 ];
 
 const CREDENTIAL_RULES = [
+  ['Motive OAuth credential', /(?<![A-Za-z0-9_-])motive_oauth_(?:code|access|refresh)_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g],
   ['Motive bearer', /(?<![A-Za-z0-9_-])motive_(?:agent|review|review_queue)_[a-f0-9]{32}_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g],
   ['OpenAI key', /(?<![A-Za-z0-9_-])sk-(?!or-)(?:(?:proj|svcacct)-)?[A-Za-z0-9_-]{32,}(?![A-Za-z0-9_-])/g],
   ['OpenRouter key', /(?<![A-Za-z0-9_-])sk-or-v1-[a-f0-9]{64}(?![A-Za-z0-9_-])/gi],

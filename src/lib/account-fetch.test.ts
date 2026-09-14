@@ -2,6 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAuthenticatedFetch, isAccountApiPath } from './account-fetch';
 
 describe('authenticated account fetch', () => {
+  it('allows only exact connector consent actions, never MCP or OAuth routes', () => {
+    const base = '/api/mcp-consent/abcdef12-1234-4234-8234-abcdef123456';
+    expect([base, `${base}/approve`, `${base}/deny`].every(isAccountApiPath)).toBe(true);
+    expect(['/mcp', '/api/mcp', '/api/mcp-oauth/token', '/api/mcp-consent/not-a-uuid',
+      `${base}/tokens`, `${base}/approve/extra`].some(isAccountApiPath)).toBe(false);
+  });
   it('recognizes only browser account routes', () => {
     expect(['/api/workspace', '/api/support', '/api/profile', '/api/credits', '/api/credits/allocations',
       '/api/account/delete', '/api/funding/openrouter', '/api/participation/me', '/api/hosted-results/id/reviews']

@@ -3,9 +3,11 @@ import { accountRuntime } from './account-runtime';
 const exactAccountPaths = new Set(['/api/workspace', '/api/support', '/api/profile', '/api/credits',
   '/api/credits/allocations', '/api/account/delete']);
 const accountPrefixes = ['/api/funding/', '/api/participation/', '/api/hosted-results/'];
+const connectorConsentPath = /^\/api\/mcp-consent\/[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?:\/(?:approve|deny))?$/;
 
 export function isAccountApiPath(pathname: string): boolean {
-  return exactAccountPaths.has(pathname) || accountPrefixes.some(prefix => pathname.startsWith(prefix));
+  return exactAccountPaths.has(pathname) || accountPrefixes.some(prefix => pathname.startsWith(prefix))
+    || connectorConsentPath.test(pathname);
 }
 
 type AuthorizationProvider = () => Promise<{ provider: 'local-better-auth' | 'supabase'; accessToken: string | null }>;

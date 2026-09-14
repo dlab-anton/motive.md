@@ -84,12 +84,13 @@ test('reports credential rules and locations without printing matched values', (
     const payload = Buffer.from(JSON.stringify({ role: 'service_role', ref: 'fixture' })).toString('base64url');
     const jwt = `${Buffer.from('{"alg":"HS256"}').toString('base64url')}.${payload}.${'e'.repeat(32)}`;
     const passwordUrl = `postgres://worker:${'Z9'.repeat(16)}@db.example.com/app`;
-    const values = [motive, provider, openai, github, privateKey, jwt, passwordUrl];
+    const oauth = ['code', 'access', 'refresh'].map(kind => `motive_oauth_${kind}_${'Q'.repeat(43)}`);
+    const values = [motive, provider, openai, github, privateKey, jwt, passwordUrl, ...oauth];
     writeFileSync(join(root, 'config.txt'), `${values.join('\n')}\n`);
 
     const result = run(root);
     assert.equal(result.status, 1);
-    for (const rule of ['Motive bearer', 'OpenRouter key', 'OpenAI key', 'GitHub token', 'private key', 'service-role JWT', 'password in URL']) {
+    for (const rule of ['Motive bearer', 'Motive OAuth credential', 'OpenRouter key', 'OpenAI key', 'GitHub token', 'private key', 'service-role JWT', 'password in URL']) {
       assert.match(result.stderr, new RegExp(`config\\.txt:\\d+ \\[${rule}\\]`));
     }
     for (const value of values) assert.equal(result.stderr.includes(value), false);

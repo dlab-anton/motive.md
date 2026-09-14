@@ -7,7 +7,9 @@
   "functions": {
     "api/index.ts": {
       "maxDuration": 300,
-      "regions": ["sin1"],
+      "regions": [
+        "sin1"
+      ],
       "includeFiles": "{migrations/*.sql,public/projects/circle-packing/*.json,server/research-memory/contracts/*.json}"
     }
   },
@@ -22,9 +24,36 @@
         "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()"
       }
     },
-    { "src": "/api", "dest": "/api/index?__motive_api_path=" },
-    { "src": "/api/(.*)", "dest": "/api/index?__motive_api_path=$1" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
+    {
+      "src": "/mcp/?",
+      "dest": "/api/index?__motive_api_path=mcp"
+    },
+    {
+      "src": "/(authorize|token|register|revoke)",
+      "dest": "/api/index?__motive_api_path=mcp-oauth/$1"
+    },
+    {
+      "src": "/\\.well-known/oauth-authorization-server",
+      "dest": "/api/index?__motive_api_path=mcp-oauth/.well-known/oauth-authorization-server"
+    },
+    {
+      "src": "/\\.well-known/oauth-protected-resource(?:/mcp)?",
+      "dest": "/api/index?__motive_api_path=mcp-oauth/.well-known/oauth-protected-resource/mcp"
+    },
+    {
+      "src": "/api",
+      "dest": "/api/index?__motive_api_path="
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index?__motive_api_path=$1"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }

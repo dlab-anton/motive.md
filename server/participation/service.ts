@@ -696,6 +696,24 @@ export class ParticipationService {
       assignment: result.response.assignment, warning: 'The token is shown in this response only. Send it only in the Authorization header.' };
   }
 
+  /** Server-only exchange for a consented connector grant; never expose this value to a browser. */
+  async resolveConnectorCredential(ownerActorId: string, tokenId: string): Promise<{ projectKey: string; expiresAt: string }> {
+    const unauthorized = () => new ParticipationError('UNAUTHORIZED', 'The connected agent is no longer authorized.');
+    if (!CANONICAL_ACCOUNT_ID.test(tokenId) || !this.options.isActorActive
+      || !await this.options.isActorActive(ownerActorId)) throw unauthorized();
+    const result = await this.pool.query(`SELECT token.* FROM motive.participation_agent_tokens token
+      JOIN motive.memberships membership ON membership.project_id=token.project_id AND membership.actor_id=token.owner_actor_id
+      JOIN motive.projects project ON project.id=token.project_id
+      WHERE token.id=$1 AND token.owner_actor_id=$2 AND project.slug=$3
+        AND token.revoked_at IS NULL AND token.expires_at>$4 AND membership.revoked_at IS NULL`,
+    [tokenId, ownerActorId, PARTICIPATION_PROJECT_SLUG, this.now()]);
+    if (result.rowCount !== 1) throw unauthorized();
+    const row = result.rows[0];
+    const projectKey = this.tokenValue(tokenId, ownerActorId);
+    if (sha256(projectKey) !== row.token_digest) throw unauthorized();
+    return { projectKey, expiresAt: dateText(row.expires_at) };
+  }
+
   async authenticateBearer(raw: string): Promise<ParticipationAgentContext> {
     if (!/^motive_agent_[a-f0-9]{32}_[A-Za-z0-9_-]{43}$/.test(raw)) throw new ParticipationError('UNAUTHORIZED', 'Agent token is invalid.');
     const digest = sha256(raw); const observedAt = this.now();

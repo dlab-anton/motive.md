@@ -1,8 +1,25 @@
 import { Pool } from 'pg';
 import { attachDatabasePool } from '@vercel/functions';
-import { getPostgresSchemaStatus, postgresPoolConfigFromEnvironment } from '../packages/accounting/src/migrations.ts';
+import { getPostgresSchemaStatus, postgresPoolConfigFromEnvironment, type PostgresSchemaStatus } from '../packages/accounting/src/migrations.ts';
 
 export const APPLICATION_DATABASE_IDLE_ERROR = 'APPLICATION_DATABASE_IDLE_CONNECTION_FAILED';
+const OPTIONAL_MCP_MIGRATION = '047_mcp_oauth.sql';
+
+/**
+ * Deploy the additive MCP code before its tables, without relaxing accounting
+ * or migration tooling. MCP routes have their own exact-schema readiness gate.
+ * This release is the rollback floor once migration 047 has been applied.
+ */
+export function applicationSchemaCanStart(schema: PostgresSchemaStatus): boolean {
+  if (schema.exact) return true;
+  if (schema.problems.length !== 1 || schema.problems[0] !== `Missing migration ${OPTIONAL_MCP_MIGRATION}.`) return false;
+  const optional = schema.expected.filter(row => row.name === OPTIONAL_MCP_MIGRATION);
+  if (optional.length !== 1 || schema.applied.some(row => row.name === OPTIONAL_MCP_MIGRATION)) return false;
+  const required = schema.expected.filter(row => row.name !== OPTIONAL_MCP_MIGRATION);
+  const applied = new Map(schema.applied.map(row => [row.name, row.checksum]));
+  return applied.size === schema.applied.length && applied.size === required.length
+    && required.every(row => applied.get(row.name) === row.checksum);
+}
 
 type PoolErrorSource = Pick<Pool, 'on'>;
 type EnvironmentSource = NodeJS.ProcessEnv;
@@ -44,7 +61,7 @@ export async function openApplicationDatabase(): Promise<Pool | null> {
   attachApplicationDatabasePoolErrorHandler(pool);
   try {
     const schema = await getPostgresSchemaStatus(pool);
-    if (!schema.exact) throw new Error('Project database migrations must be applied before startup.');
+    if (!applicationSchemaCanStart(schema)) throw new Error('Project database migrations must be applied before startup.');
     return pool;
   } catch (error) {
     await pool.end();
