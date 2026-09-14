@@ -81,8 +81,8 @@ application that serves the live participation flow.
 
 ## Database release boundary
 
-The canonical production deployment and first public source baseline are release
-AL. Production currently reports schema 001–039 and 041–044, with migration 040
+The first public source uses the reviewed AL backend and its launch UI updates.
+Production uses schema 001–039 and 041–044, with migration 040
 deliberately excluded. Proposed native checker/storage coverage work associated
 with migrations 045/046 remains held pending actual operational terms, a
 refreshed candidate and checks, and a coordinated admission/drain cutover. It is

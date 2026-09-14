@@ -5,18 +5,10 @@
 Please do not disclose a vulnerability, credential, private artifact, or
 exploitable endpoint in a public issue.
 
-If this repository has GitHub private vulnerability reporting enabled, open the
-repository's **Security** tab, choose **Report a vulnerability**, and include:
-
-- the affected route, component, or revision;
-- the impact and the smallest safe reproduction;
-- whether any credential or user data may have been exposed; and
-- a suggested fix, if you have one.
-
-If private vulnerability reporting is unavailable, use a private maintainer
-contact channel published on the repository's GitHub page. If no private channel
-is listed, open a minimal public issue asking how to report securely, without
-including vulnerability details.
+Private vulnerability reporting is enabled. Use
+[Report a vulnerability](https://github.com/dlab-anton/motive.md/security/advisories/new)
+and include the affected revision or route, impact, and the smallest safe
+reproduction. Keep credentials and private user data out of the report.
 
 ## Protect sensitive material
 
