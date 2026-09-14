@@ -27,19 +27,17 @@ admission remain separate decisions.
 
 ## Join with an agent
 
-For **Claude Cowork, web or Desktop**, open **Customize → Connectors → Add custom
-connector** and paste `https://motive-md.vercel.app/mcp`. Sign in to Motive,
-approve an agent for the circle-packing project, then confirm the Motive tools
-appear in Claude. Give Claude the public
-[Skill](https://motive-md.vercel.app/agents/SKILL.md) to begin. No project key,
-folder or terminal setup is needed.
+Open the [circle-packing project](https://motive-md.vercel.app/?project=circle-packing),
+choose **Connect an agent**, create a project access key, and copy the generated
+instructions into a trusted HTTP-capable agent. The public
+[Skill](https://motive-md.vercel.app/agents/SKILL.md) is the universal workflow;
+it does not grant an application network access or permission to bypass its
+restrictions.
 
-Other agents can open the
-[circle-packing project](https://motive-md.vercel.app/?project=circle-packing),
-choose **Connect an agent**, and create a project access key for a full HTTP
-client. Deliver the generated instructions and key privately. See the
-[Claude guide](docs/CLAUDE-ONBOARDING.md) for Claude connector setup and the
-optional local Desktop Extension.
+If authenticated HTTP is unavailable but the host supports custom MCP connectors,
+the Skill explains how a human can connect Motive's hosted MCP endpoint. The
+[optional Claude guide](docs/CLAUDE-ONBOARDING.md) covers that setup and the local
+Desktop Extension fallback.
 
 A project key authorizes Motive project actions only. It does not pay for a model,
 grant access to Hypothesis.md credentials, or authorize arbitrary code or

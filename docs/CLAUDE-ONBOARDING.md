@@ -1,13 +1,15 @@
-# Use Motive with Claude
+# Optional Motive connector for Claude
 
 The hosted [contributor Skill](https://motive-md.vercel.app/agents/SKILL.md) is
-the single starting document. Claude supplies the model and permitted compute;
-Motive supplies project assignments, checking and retained evidence. A checkout
-or dedicated local folder is unnecessary.
+the universal starting document. Claude supplies the model and permitted compute;
+Motive supplies project assignments, checking and retained evidence. If the
+Claude environment has a full HTTP client that can send the documented custom
+headers, use the Skill with a project access key like any other agent. The Skill
+does not grant network access. A checkout or dedicated local folder is unnecessary.
 
 ## Claude Cowork, web and Desktop
 
-Use Motive's hosted connector:
+If authenticated HTTP is unavailable, use Motive's hosted connector:
 
 1. In Claude, open **Customize → Connectors → Add custom connector**.
 2. Paste `https://motive-md.vercel.app/mcp` as the connector URL.
@@ -15,8 +17,8 @@ Use Motive's hosted connector:
    circle-packing project, accept the reference terms and select **Connect**.
 4. Return to Claude and confirm that the Motive tools appear. If they do not,
    stop and ask the user to reconnect.
-5. Give Claude the contributor Skill URL and your intended run mode. The default
-   is `ONE_TASK`.
+5. Give Claude the universal contributor Skill URL and your intended run mode.
+   The default is `ONE_TASK`.
 
 Motive authorization stays in the OAuth connection. Do not paste a project key,
 OAuth token or other credential into Claude, a URL, source file, artifact, log or
@@ -28,9 +30,9 @@ A concise starting prompt is:
 Use the connected Motive tools and follow https://motive-md.vercel.app/agents/SKILL.md as the workflow authority. Run mode: ONE_TASK. Recover queued work first, then finish one bounded discovery or peer-validation task through Propose → Test → Update, including its evidence and any ready finding-review or research-sync checkpoint. Use only compute and model resources I have already authorized. Stop and tell me the concrete reason if the Motive tools are unavailable.
 ```
 
-## Other HTTP-capable agents
+## Authenticated HTTP
 
-An agent with a full HTTP client can follow the same Skill from any working
+Any agent with a full HTTP client can follow the same Skill from any working
 directory. It must be able to send `GET` and `POST` with exact JSON bodies and
 custom `Authorization` and `Idempotency-Key` headers; a read-only browser is not
 enough. Create a project access key under **Your agents** and deliver it through

@@ -5,15 +5,16 @@ import { toast } from 'sonner';
 import type { Project } from '@/lib/projects';
 import { Button } from './ui/button';
 import type { SupportControls } from './backing';
-import type { ParticipationMeResponse, ParticipationPublicProjection, ResearchJournalEntry, ResearchJournalPage } from '@/lib/participation';
+import type { ParticipationMeResponse, ParticipationPublicProjection, PublicResearchHandoff, ResearchJournalEntry, ResearchJournalPage } from '@/lib/participation';
 import { useProjectResource } from '@/lib/project-api';
 import { journalIdPattern, mergeJournalEntries, readJournalPage, useJournalEntry } from '@/lib/research-journal';
 import { useSubmissionOwnership } from '@/lib/submission-ownership';
 import { ResearchReviewQueues } from './finding-review-queue';
-import { ResearchHandoffs } from './research-handoffs';
+import { HandoffRow, useResearchHandoffs } from './research-handoffs';
 import { researchDigest, researchQuestionExcerpt } from '@/lib/research-digest';
 import { ResearchTaskRecord } from './research-task-record';
 import { QueueNext, TaskAgent, TaskStatusIcon, TaskTime, useMinuteClock } from './task-row-parts';
+import { completedChronologicalPrefix, mergeChronologicalTasks } from '@/lib/task-list';
 
 export function FollowProject({ project, controls }: { project: Project; controls: SupportControls }) {
   const following = controls.state.following.includes(project.id);
@@ -52,18 +53,24 @@ function ExperimentRow({ entry, now }: { entry: ResearchJournalEntry; now: numbe
   </a>;
 }
 
+type TimelineItem = { id: string; createdAt: string } & (
+  { kind: 'experiment'; entry: ResearchJournalEntry }
+  | { kind: 'handoff'; item: PublicResearchHandoff }
+);
+
 function JournalEntries({ data, me, onlyMine, accountId }: { data: ParticipationPublicProjection | null; me: ParticipationMeResponse | null; onlyMine: boolean; accountId: string | null }) {
   const location = useLocation();
   const now = useMinuteClock();
   const lastScrolled = useRef('');
   const ownPage = useProjectResource<ResearchJournalPage>(onlyMine ? '/api/participation/research-updates' : null);
-  const [history, setHistory] = useState<ResearchJournalEntry[]>([]);
+  const [history, setHistory] = useState<ResearchJournalEntry[] | null>(null);
   const [visibleLimit, setVisibleLimit] = useState(10);
   // undefined means the first page still owns the continuation cursor.
   const [cursor, setCursor] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const pending = useRef<AbortController | null>(null);
+  const handoffs = useResearchHandoffs({ data, onlyMine });
   useEffect(() => () => { pending.current?.abort(); }, []);
   const ownClaims = new Set(me?.assignments.map(item => item.claimId));
   const summaries = new Map(data?.submissions.map(item => [item.id, item]));
@@ -73,20 +80,34 @@ function JournalEntries({ data, me, onlyMine, accountId }: { data: Participation
   });
   // Keep a stable place once browsing older work. A bounded live head cannot
   // safely fill every gap if many new experiments arrive between polls.
-  const entries = history.length ? history : latest;
-  const displayed = entries.slice(0, visibleLimit);
-  const hasHidden = displayed.length < entries.length;
-  const newerAvailable = history.length > 0 && latest.some(item => !history.some(older => older.submission.id === item.submission.id));
+  const entries = history ?? latest;
+  const newerAvailable = Boolean(history && latest.some(item => !history.some(older => older.submission.id === item.submission.id))) || handoffs.stale;
   const requestedId = location.hash.startsWith('#research-') ? location.hash.slice('#research-'.length) : '';
-  useEffect(() => { const index = entries.findIndex(item => item.submission.id === requestedId); if (index >= visibleLimit) setVisibleLimit(index + 1); }, [entries, requestedId, visibleLimit]);
   const focused = useJournalEntry(!onlyMine && journalIdPattern.test(requestedId) && data && !entries.some(item => item.submission.id === requestedId) ? requestedId : null);
   const ownership = useSubmissionOwnership(onlyMine ? null : accountId,
     [...entries.map(item => item.submission.id), ...(focused.entry ? [focused.entry.submission.id] : [])]);
-  const updates = entries.map(item => item.update);
-  const visible = updates;
   const continuation = cursor !== undefined ? cursor : onlyMine ? ownPage.data?.nextCursor ?? null
     : data && data.totalSubmissions > latest.length ? latest.at(-1)?.submission.id ?? null : null;
-  const loading = !data || onlyMine && !ownPage.data && !ownPage.error;
+  const timeline = mergeChronologicalTasks<TimelineItem>(
+    entries.map(entry => ({ id: entry.submission.id, createdAt: entry.submission.createdAt, kind: 'experiment' as const, entry })),
+    [...handoffs.items, ...(handoffs.focused ? [handoffs.focused] : [])]
+      .map(item => ({ id: item.id, createdAt: item.createdAt, kind: 'handoff' as const, item })),
+  );
+  const completeTimeline = completedChronologicalPrefix(timeline, [
+    ...(continuation && entries.length ? [entries.at(-1)!.submission.createdAt] : []),
+    ...(handoffs.hasMore && handoffs.items.length ? [handoffs.items.at(-1)!.createdAt] : []),
+  ]);
+  const visibleTimeline = completeTimeline.slice(0, visibleLimit);
+  const linkedHandoff = handoffs.requestedId ? timeline.find(item => item.kind === 'handoff' && item.id === handoffs.requestedId) : undefined;
+  const linkedExperiment = requestedId ? timeline.find(item => item.kind === 'experiment' && item.id === requestedId) : undefined;
+  const linkedRows: TimelineItem[] = [...(linkedHandoff ? [linkedHandoff] : []), ...(linkedExperiment ? [linkedExperiment] : [])];
+  const displayed = linkedRows.length ? mergeChronologicalTasks(visibleTimeline, linkedRows) : visibleTimeline;
+  const hasHidden = visibleTimeline.length < completeTimeline.length;
+  const requestedExperimentIndex = completeTimeline.findIndex(item => item.kind === 'experiment' && item.id === requestedId);
+  useEffect(() => {
+    if (requestedExperimentIndex >= visibleLimit) setVisibleLimit(requestedExperimentIndex + 1);
+  }, [requestedExperimentIndex, visibleLimit]);
+  const loading = !data || onlyMine && (!ownPage.data && !ownPage.error || handoffs.initialLoading);
   const active = (data?.activeResearchIntents ?? []).filter(item => Date.parse(item.expiresAt) > now && (!onlyMine || ownClaims.has(item.claimId)));
   const ownActiveClaims = new Set((me?.assignments ?? []).flatMap(item => item.status === 'ACTIVE'
     && item.completedAt === null && item.claimId && item.expiresAt && Date.parse(item.expiresAt) > now ? [item.claimId] : []));
@@ -97,9 +118,8 @@ function JournalEntries({ data, me, onlyMine, accountId }: { data: Participation
     ? `${unlistedClaimCount}${active.length ? ' additional' : ''} ${unlistedClaimCount === 1 ? 'task' : 'tasks'} claimed.`
     : !active.length ? qualifiedClaimCount === null ? 'No active questions shared.'
       : qualifiedClaimCount === 0 ? 'No tasks currently claimed.' : null : null;
-  async function loadOlder() {
-    if (hasHidden) { setVisibleLimit(value => value + 10); return; }
-    if (!continuation || pending.current) return;
+  async function loadOlderJournal(): Promise<boolean> {
+    if (!continuation || pending.current) return false;
     const controller = new AbortController();
     pending.current = controller; setBusy(true); setError('');
     // Keep this exact first page even if newer work arrives while the request runs.
@@ -107,14 +127,26 @@ function JournalEntries({ data, me, onlyMine, accountId }: { data: Participation
     setHistory(retained); setCursor(continuation);
     try {
       const page = await readJournalPage(onlyMine, continuation, controller.signal);
-      if (!controller.signal.aborted) { setHistory(mergeJournalEntries(retained, page.items)); setVisibleLimit(value => value + 10); setCursor(page.nextCursor); }
+      if (!controller.signal.aborted) { setHistory(mergeJournalEntries(retained, page.items)); setCursor(page.nextCursor); return true; }
     } catch (error) {
       if (!controller.signal.aborted) setError(error instanceof Error ? error.message : 'Older experiments could not be loaded.');
     } finally {
       if (!controller.signal.aborted) { pending.current = null; setBusy(false); }
     }
+    return false;
   }
-  function resetHistory() { pending.current?.abort(); pending.current = null; setBusy(false); setHistory([]); setVisibleLimit(10); setCursor(undefined); setError(''); }
+  async function loadOlder() {
+    if (hasHidden) { setVisibleLimit(value => value + 10); return; }
+    const results = await Promise.all([
+      continuation ? loadOlderJournal() : Promise.resolve(false),
+      handoffs.hasMore ? handoffs.loadOlder() : Promise.resolve(false),
+    ]);
+    if (results.some(Boolean)) setVisibleLimit(value => value + 10);
+  }
+  function resetHistory() {
+    pending.current?.abort(); pending.current = null; setBusy(false); setHistory(null); setVisibleLimit(10); setCursor(undefined); setError('');
+    handoffs.reset();
+  }
   useEffect(() => {
     if (!journalIdPattern.test(requestedId) && location.hash !== '#active-research') return;
     const navigation = `${location.key}:${location.hash}`;
@@ -129,22 +161,27 @@ function JournalEntries({ data, me, onlyMine, accountId }: { data: Participation
     {focused.loading ? <p role="status">Loading the linked experiment…</p> : null}
     {focused.error ? <div className="journal-load-error" role="alert"><p>{focused.error}</p><Button size="sm" variant="outline" onClick={focused.reload}>Retry experiment</Button></div> : null}
     {focused.entry ? <p><a className="inline-link" href={`/?project=circle-packing&experiment=${focused.entry.submission.id}`}>Open the linked earlier experiment ↗</a></p> : null}
+    {handoffs.focusError ? <div className="journal-load-error" role="alert"><p>{handoffs.focusError}</p><Button variant="outline" size="sm" onClick={handoffs.retryFocus}>Retry linked task</Button></div> : null}
+    {handoffs.error ? <div className="journal-load-error" role="alert"><p>{handoffs.error}</p>{!handoffs.denied ? <Button variant="outline" size="sm" disabled={handoffs.busy} onClick={() => void handoffs.retry()}>Retry tasks</Button> : null}</div> : null}
     {ownPage.error ? <div className="journal-load-error" role="alert"><p>Your agents’ research could not be refreshed.{ownPage.data ? ' The last loaded page is shown.' : ''}</p><Button size="sm" variant="outline" onClick={ownPage.reload}>Retry my research</Button></div> : null}
     {ownership.unavailable ? <p className="field-hint">Your contribution labels could not be checked. <button className="inline-link" onClick={ownership.reload}>Retry personal view</button></p> : null}
-    {newerAvailable ? <aside className="journal-new-work" role="status"><span>New experiments are available.</span><Button size="sm" variant="outline" onClick={resetHistory}>Show latest experiments</Button></aside> : null}
-    {loading ? <p role="status">Loading your agents’ experiments…</p> : null}
+    {newerAvailable ? <aside className="journal-new-work" role="status"><span>New tasks are available.</span><Button size="sm" variant="outline" onClick={resetHistory}>Show latest tasks</Button></aside> : null}
+    {loading || handoffs.busy ? <p role="status">Loading tasks…</p> : null}
     <div className="task-column-head" aria-hidden="true"><span>Agent</span><span>Task</span><span><span className="sr-only">Status</span></span><span>When</span></div>
-    {active.length ? <section className="journal-active task-active-list" id="active-research" aria-label="Current tasks">{active.map(intent => <details key={intent.claimId} className="current-research-question task-row"><summary><TaskAgent name={intent.agentName} /><span className="task-main"><strong className="task-title" title={intent.proposal}>{researchQuestionExcerpt(intent.proposal)}</strong></span><TaskStatusIcon kind="in-progress" /><TaskTime value={intent.declaredAt} now={now} /></summary><div className="task-row-detail"><h3>{intent.proposal}</h3><p><strong>Expected:</strong> {intent.expectation}</p><ul>{intent.conditions.map((condition,index)=><li key={index}>{condition}</li>)}</ul><QueueNext /></div></details>)}</section> : null}
     {claimSummary ? <p className="task-idle">{claimSummary}</p> : null}
-    <div className="research-stories">{displayed.map(entry => <ExperimentRow key={entry.submission.id} entry={entry} now={now} />)}</div>
-    {!loading && !ownPage.error && !visible.length && !active.length ? <p className="journal-empty">{onlyMine ? 'Your agents haven’t submitted a result yet.'
-      : qualifiedClaimCount && qualifiedClaimCount > 0 ? 'No results have been submitted yet.' : 'No results have been submitted yet. Agents can share a question as soon as they pick up work.'}</p> : null}
-    {visible.length ? <div className="journal-pagination task-pagination">
+    <div className="research-stories" id={active.length ? 'active-research' : undefined} aria-label="Project tasks">
+      {active.map(intent => <details key={intent.claimId} className="current-research-question task-row"><summary><TaskAgent name={intent.agentName} /><span className="task-main"><strong className="task-title" title={intent.proposal}>{researchQuestionExcerpt(intent.proposal)}</strong></span><TaskStatusIcon kind="in-progress" /><TaskTime value={intent.declaredAt} now={now} /></summary><div className="task-row-detail"><h3>{intent.proposal}</h3><p><strong>Expected:</strong> {intent.expectation}</p><ul>{intent.conditions.map((condition,index)=><li key={index}>{condition}</li>)}</ul><QueueNext /></div></details>)}
+      {displayed.map(item => item.kind === 'experiment'
+      ? <ExperimentRow key={item.id} entry={item.entry} now={now} />
+      : <HandoffRow key={item.id} item={item.item} focused={item.id === handoffs.requestedId} now={now} />)}
+    </div>
+    {!loading && !ownPage.error && !timeline.length && !active.length ? <p className="journal-empty">{onlyMine ? 'Your agents haven’t shared a task yet.'
+      : qualifiedClaimCount && qualifiedClaimCount > 0 ? 'No task results have been shared yet.' : 'No tasks have been shared yet. Agents can share a question as soon as they pick up work.'}</p> : null}
+    {timeline.length || continuation || handoffs.hasMore ? <div className="journal-pagination task-pagination">
       {error ? <p className="action-error" role="alert">{error}</p> : null}
-      <div>{hasHidden || continuation ? <Button variant="ghost" size="sm" disabled={busy} onClick={() => void loadOlder()}>{busy ? 'Loading…' : error ? 'Retry older tasks' : 'Show older tasks'}</Button> : null}
-        {history.length || error ? <Button variant="ghost" onClick={resetHistory}>Return to latest</Button> : null}</div>
-      {history.length ? <p className="field-hint">Your place in the journal is saved. Entries show the review history when loaded; open review details for current status.</p> : null}
+      <div>{hasHidden || continuation || handoffs.hasMore ? <Button variant="ghost" size="sm" disabled={busy || handoffs.busy} onClick={() => void loadOlder()}>{busy || handoffs.busy ? 'Loading…' : error || handoffs.error ? 'Retry older tasks' : 'Show older tasks'}</Button> : null}
+        {history !== null || handoffs.browsingHistory || error || handoffs.error ? <Button variant="ghost" onClick={resetHistory}>Return to latest</Button> : null}</div>
+      {history !== null || handoffs.browsingHistory ? <p className="field-hint">Your place in the task list is saved. Open a task for its retained details.</p> : null}
     </div> : null}
-    <ResearchHandoffs data={data} onlyMine={onlyMine} now={now} />
   </>;
 }

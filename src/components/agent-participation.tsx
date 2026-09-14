@@ -6,22 +6,19 @@ import { Label } from './ui/label';
 import type { SupportControls } from './backing';
 import type { AgentTokenProjection, AgentWorkQueueResponse, JoinParticipationInput, JoinParticipationResponse, ParticipationMeResponse, PublicResearchUpdate } from '@/lib/participation';
 import { useProjectMutation, useProjectResource } from '@/lib/project-api';
-import { agentInstructions, agentRunModes, type AgentRunMode, type AgentTransport } from '@/lib/agent-instructions';
+import { agentInstructions, agentRunModes, type AgentRunMode } from '@/lib/agent-instructions';
 import { connectionActivity, connectionPresence } from '@/lib/agent-activity';
 import { researchQuestionExcerpt } from '@/lib/research-digest';
 import { useSearchParams } from 'react-router-dom';
 import { TaskAgent } from './task-row-parts';
 
 const JOIN_AGENT_EVENT = 'motive:join-agent';
-const CLAUDE_GUIDE = 'https://github.com/dlab-anton/motive.md/blob/main/docs/CLAUDE-ONBOARDING.md';
-const MOTIVE_CONNECTOR = 'https://motive-md.vercel.app/mcp';
+const CANONICAL_AGENT_ORIGIN = 'https://motive-md.vercel.app';
 
-function connectorInstructions(runMode: AgentRunMode, credential: Pick<AgentTokenProjection, 'id' | 'agentName'>): string {
-  return `Use the connected Motive tools and follow https://motive-md.vercel.app/agents/SKILL.md as the workflow authority. Continue Motive agent ${credential.agentName}, connection ${credential.id}. Run mode: ${runMode}. Call get_work_queue first and recover existing work before taking a new claim. Then call get_assignment before any write and verify the credential projection has id ${credential.id} and agentName ${credential.agentName}; if it differs, stop and ask me to reconnect Motive and approve this agent. Follow Propose → Test → Update, preserve evidence, complete any ready finding-review or research-sync checkpoint, respect the selected run limit, and report the concrete reason when you pause. Use only compute and model resources I have already authorized. Never ask for or expose a project key or OAuth credential.`;
-}
-
-function AgentAppChoice({ value, onChange, id }: { value: AgentTransport; onChange: (value: AgentTransport) => void; id: string }) {
-  return <div className="agent-run-choice"><Label htmlFor={id}>Use in</Label><select id={id} value={value} onChange={event => onChange(event.target.value as AgentTransport)}><option value="mcp">Claude connector</option><option value="http">Another HTTP agent</option></select></div>;
+function agentOrigin(): string {
+  return ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
+    ? window.location.origin
+    : CANONICAL_AGENT_ORIGIN;
 }
 
 function RunModeChoice({ value, onChange, id }: { value: AgentRunMode; onChange: (value: AgentRunMode) => void; id: string }) {
@@ -39,7 +36,6 @@ function AgentCredential({ credential, data, stale }: { credential: AgentTokenPr
   const [expanded, setExpanded] = useState(false);
   const [chosenRunMode, setRunMode] = useState<AgentRunMode | null>(null);
   const [resumeStatus, setResumeStatus] = useState('');
-  const [agentApp, setAgentApp] = useState<AgentTransport>('mcp');
   const active = !credential.revokedAt && new Date(credential.expiresAt).getTime() > Date.now();
   const status = connectionActivity(data, credential);
   const progress = data.loopProgress?.find(item => item.credentialId === credential.id);
@@ -59,11 +55,9 @@ function AgentCredential({ credential, data, stale }: { credential: AgentTokenPr
     {session?.stopReason ? <p className="agent-stop-reason"><strong>Stop reason</strong>{session.stopReason}</p> : null}
     {presence === 'No recent check-in' ? <p className="field-hint">Motive cannot see whether your external agent is still running. Continue in its application to check in again.</p> : null}
     {expanded && active ? <AgentNextTask credential={credential} /> : null}
-    {active ? <div className="agent-resume"><AgentAppChoice value={agentApp} onChange={value => { setAgentApp(value); setResumeStatus(''); }} id={`agent-app-${credential.id}`} /><RunModeChoice value={runMode} onChange={setRunMode} id={`agent-run-${credential.id}`} /><Button variant="outline" size="sm" onClick={async () => {
-      const prompt = agentApp === 'mcp'
-        ? connectorInstructions(runMode, credential)
-        : agentInstructions(window.location.origin, runMode, { id: credential.id, agentName: credential.agentName }, 'http');
-      try { await navigator.clipboard.writeText(prompt); setResumeStatus(agentApp === 'mcp' ? 'Copied. First add the Motive custom connector and approve this agent, then paste the prompt into Claude.' : 'Copied. Paste into the conversation where this agent has its access key.'); }
+    {active ? <div className="agent-resume"><RunModeChoice value={runMode} onChange={setRunMode} id={`agent-run-${credential.id}`} /><Button variant="outline" size="sm" onClick={async () => {
+      const prompt = agentInstructions(agentOrigin(), runMode, { id: credential.id, agentName: credential.agentName });
+      try { await navigator.clipboard.writeText(prompt); setResumeStatus('Copied. Paste into the conversation where this agent has its access key.'); }
       catch { setResumeStatus('Clipboard unavailable. Open Skill.md and continue in your agent application.'); }
     }}><Copy />Copy continue prompt</Button><p className="field-hint">Continue in your agent application. Copying this prompt does not start it.</p>{resumeStatus ? <p role="status" className="field-hint">{resumeStatus}</p> : null}</div> : null}
     <div className="agent-history-contact"><a className="agent-result-link" href={taskHref}>{status.submission ? 'View latest task' : 'View tasks'}<ArrowUpRight /></a><p className="agent-contact-time">{credential.lastSeenAt ? <>Last contact <time dateTime={credential.lastSeenAt}>{new Date(credential.lastSeenAt).toLocaleString()}</time></> : 'No contact yet'}</p></div>
@@ -88,7 +82,6 @@ export function AgentParticipation({ controls }: { controls: SupportControls; re
   const [creatingAnother, setCreatingAnother] = useState(false);
   const [copyStatus, setCopyStatus] = useState('');
   const [runMode, setRunMode] = useState<AgentRunMode>('ONE_TASK');
-  const [agentApp, setAgentApp] = useState<AgentTransport>(() => searchParams.get('client') === 'http' ? 'http' : 'mcp');
   const credentials = [...(me.data?.credentials ?? [])]
     .filter(item => item.id !== receipt?.credential.id);
   if (!receipt) for (const created of createdCredentials) {
@@ -112,8 +105,7 @@ export function AgentParticipation({ controls }: { controls: SupportControls; re
     setSearchParams(next, { replace: true });
   }, [controls.user, searchParams, setSearchParams]);
   async function copyInstructions(tokenReceipt: JoinParticipationResponse) {
-    const origin = window.location.origin;
-    const prompt = agentInstructions(origin, runMode, { id: tokenReceipt.credential.id, agentName: tokenReceipt.credential.agentName, token: tokenReceipt.token });
+    const prompt = agentInstructions(agentOrigin(), runMode, { id: tokenReceipt.credential.id, agentName: tokenReceipt.credential.agentName, token: tokenReceipt.token });
     try {
       await navigator.clipboard.writeText(prompt);
       if (receiptRef.current?.credential.id !== tokenReceipt.credential.id) return;
@@ -121,14 +113,6 @@ export function AgentParticipation({ controls }: { controls: SupportControls; re
     } catch {
       if (receiptRef.current?.credential.id !== tokenReceipt.credential.id) return;
       setCopyStatus('Clipboard unavailable. Copy the guide link and access key manually.');
-    }
-  }
-  async function copyConnectorUrl() {
-    try {
-      await navigator.clipboard.writeText(MOTIVE_CONNECTOR);
-      setCopyStatus('Connector URL copied. Paste it into Claude’s custom connector setup.');
-    } catch {
-      setCopyStatus(`Clipboard unavailable. Copy ${MOTIVE_CONNECTOR} manually.`);
     }
   }
   async function enroll() {
@@ -162,8 +146,8 @@ export function AgentParticipation({ controls }: { controls: SupportControls; re
     window.requestAnimationFrame(() => enrollmentChoiceRef.current?.focus({ preventScroll: true }));
   }
   return <section className="agent-participation" id="contribute-agent" aria-labelledby="agent-participation-title">
-    <div className="agent-section-heading"><Terminal aria-hidden="true" /><h2 id="agent-participation-title">Your agents</h2>{controls.user ? <Button variant="outline" size="sm" onClick={showConnectionSlot}>Add agent</Button> : null}</div>
-    {!credentials.length ? <p>Give your agent Skill.md. It takes a task, saves what it learns and checks other contributors’ work.</p> : null}
+    <div className="agent-section-heading"><Terminal aria-hidden="true" /><h2 id="agent-participation-title">Your agents</h2>{controls.user && credentials.length && !creatingAnother && !receipt ? <Button variant="outline" size="sm" onClick={showConnectionSlot}>Add agent</Button> : null}</div>
+    {!credentials.length && !receipt ? <p>Connect an agent to take a task, save its results and check other contributors’ work.</p> : null}
     {controls.user && credentials.length ? <div className="my-agent-connections">
       <ul className="agent-credential-list" aria-live="polite" aria-relevant="additions text">{credentials.map(item => <AgentCredential key={item.id} credential={item} data={activity} stale={Boolean(me.error)} />)}</ul>
     </div> : null}
@@ -178,29 +162,19 @@ export function AgentParticipation({ controls }: { controls: SupportControls; re
           <Button variant="ghost" onClick={() => acknowledgeReceipt(receipt.credential.id, false)}>I’ve saved the access key</Button>
           <Button variant="outline" onClick={() => acknowledgeReceipt(receipt.credential.id, true)}>Saved — connect another agent<ArrowUpRight /></Button></div>
         {copyStatus ? <p className="field-hint" role="status">{copyStatus}</p> : null}
-      </div> : !me.data && !createdCredentials.length && !me.error ? <p role="status">Loading your agents…</p> : !credentials.length || creatingAnother ? <>
-        <p className="agent-enroll-intro">Choose where your agent runs. Claude connects through Motive sign-in; other agents use a project access key.</p>
-        <AgentAppChoice value={agentApp} onChange={value => { setAgentApp(value); setCopyStatus(''); }} id="new-agent-app" />
-        {agentApp === 'mcp' ? <div className="agent-enroll-form">
-          <ol className="claude-setup-steps">
-            <li>In Claude, open <strong>Customize → Connectors → Add custom connector</strong>.</li>
-            <li><Button variant="outline" size="sm" onClick={() => void copyConnectorUrl()}><Copy />Copy Motive connector URL</Button><p>Paste <code>{MOTIVE_CONNECTOR}</code>.</p></li>
-            <li>Sign in to Motive and approve a new or existing agent for the circle-packing project.</li>
-          </ol>
-          <p className="field-hint">Return to Claude and confirm the Motive tools appear. If they do not, reconnect the connector.</p>
-          {copyStatus ? <p className="field-hint" role="status">{copyStatus}</p> : null}
-          {credentials.length ? <Button type="button" variant="ghost" onClick={() => setCreatingAnother(false)}>Cancel</Button> : null}
-        </div> : <form className="agent-enroll-form" onSubmit={event => { event.preventDefault(); void enroll(); }}>
+      </div> : !me.data && !createdCredentials.length && !me.error ? <p role="status">Loading your agents…</p> : creatingAnother ? <>
+        <p className="agent-enroll-intro">Create a project access key, then copy the instructions into your trusted agent.</p>
+        <form className="agent-enroll-form" onSubmit={event => { event.preventDefault(); void enroll(); }}>
           <label className="choice-line"><input ref={enrollmentChoiceRef} type="checkbox" checked={publish} disabled={join.busy || join.retryPending} onChange={event => setPublish(event.target.checked)} /><span>Credit my account name, {controls.user.name}, publicly when I contribute.</span></label>
           <label className="choice-line"><input type="checkbox" required checked={acceptTerms} disabled={join.busy || join.retryPending} onChange={event => setAcceptTerms(event.target.checked)} /><span>I’ll submit work I have permission to share publicly and preserve the reference attribution. <a href="/agents/SKILL.md" target="_blank" rel="noreferrer">Read the contribution terms ↗</a></span></label>
           <Button type="submit" disabled={join.busy || (!join.retryPending && !acceptTerms)}>{join.busy ? 'Connecting…' : join.retryPending ? 'Retry this connection' : 'Create project access key'}<ArrowUpRight /></Button>
-          {credentials.length ? <Button type="button" variant="ghost" disabled={join.busy || join.retryPending} onClick={() => setCreatingAnother(false)}>Cancel</Button> : null}
+          <Button type="button" variant="ghost" disabled={join.busy || join.retryPending} onClick={() => setCreatingAnother(false)}>Cancel</Button>
           {join.error ? <p role="alert" className="action-error">{join.error}{join.retryPending ? ' Retrying recovers the same connection.' : ''}</p> : null}
-        </form>}
-      </> : null}
+        </form>
+      </> : !credentials.length ? <Button onClick={showConnectionSlot}>Add agent<ArrowUpRight /></Button> : null}
     </div>
-    <div className="agent-help-links"><a href="/agents/SKILL.md" target="_blank" rel="noreferrer">Skill.md ↗</a><a href={CLAUDE_GUIDE} target="_blank" rel="noreferrer">Claude setup ↗</a></div>
+    <div className="agent-help-links"><a href="/agents/SKILL.md" target="_blank" rel="noreferrer">Skill.md ↗</a></div>
     {me.error ? <p role="alert" className="action-error">{me.error}</p> : null}
-    <p className="agent-memory-note">Assignments expire unless renewed. Agents can release work whenever they leave; revoking access stops new actions. Submitted evidence stays with the project.</p>
+    {credentials.length || receipt || creatingAnother ? <p className="agent-memory-note">Assignments expire unless renewed. Agents can release work whenever they leave; revoking access stops new actions. Submitted evidence stays with the project.</p> : null}
   </section>;
 }
