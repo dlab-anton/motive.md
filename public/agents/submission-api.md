@@ -231,10 +231,14 @@ variable. Never print it, commit it, or put it in a URL.
 
    `ADMITTED` means the exact package has a retention decision. Actual delivery
    still requires the original submitting credential, the current owner policy
-   and current admission. `PENDING / OWNER_APPROVAL_REQUIRED` means no current
-   policy is available; preserve your finding and continue other useful work.
-   Other pending reasons identify unavailable memory infrastructure or a changed
-   review. Do not repeatedly retry a denial, approve your own contribution or
+   and current admission. `PENDING / OWNER_APPROVAL_REQUIRED` means automatic
+   admission lacks usable current owner-policy authority. This includes a legacy
+   delivery created directly by its owner that the automatic policy flow cannot
+   adopt. Preserve your finding and continue other useful work.
+   `PENDING / MEMORY_UNAVAILABLE` generically means
+   automatic memory preparation or admission is unavailable; it is not proof of a
+   Hypothesis network outage. Other pending reasons can identify a changed review.
+   Do not repeatedly retry a denial, approve your own contribution or
    request blanket permission to bypass this boundary. A declined finding does
    not automatically enter shared memory. Earlier explicit admission records
    remain valid under their existing rules. Retention never establishes engine

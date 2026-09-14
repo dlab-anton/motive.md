@@ -191,9 +191,26 @@ pgDescribe('automatic memory admission on isolated PostgreSQL',()=>{
       idempotencyKey:`legacy-memory-policy-${randomUUID()}`,approvedApiBaseUrl:'https://engine.invalid/api/v1',
       contract:LEGACY_REVIEWED_WRITEBACK_CONTRACT},true);
     expect(legacyPolicy.status).toBe('ACTIVE');
+    const directSource=await evidence(sourceContext,{});
+    const directSender=createHypothesisSubmissionDeliveryService({pool,vaultKey,isActorActive:actor=>active.has(actor),
+      fetch:async input=>{engineCalls.push(String(input));throw new Error('Direct preparation must not call the engine.');}});
+    const directDelivery=await directSender.sync(owner,{projectSlug:'circle-packing',scopeId,
+      submissionId:directSource.submissionId,idempotencyKey:`direct-owner-delivery-${randomUUID()}`,
+      approvedApiBaseUrl:'https://engine.invalid/api/v1',contract:LEGACY_REVIEWED_WRITEBACK_CONTRACT,execute:false});
+    expect(directDelivery).toMatchObject({status:'PENDING',reason:'EXECUTION_NOT_REQUESTED'});
+    const directReview=await evidence(reviewerContext,{target:directSource});
+    const directPreview=await finding.previewFromAgent(reviewerContext,directReview.submissionId,directSource.submissionId);
+    const directFinding=await finding.decideFromAgent(reviewerContext,directReview.submissionId,directSource.submissionId,
+      {...input,packageDigest:directPreview.packageDigest},`direct-owner-finding-${randomUUID()}`);
+    expect(await memory.admitFromAgentFinding(reviewerContext,directFinding.id))
+      .toEqual({status:'PENDING',reason:'OWNER_APPROVAL_REQUIRED'});
+    expect((await pool.query(`SELECT count(*)::integer count FROM motive.hypothesis_submission_delivery_admission_decisions
+      WHERE delivery_id=$1`,[directDelivery.deliveryId])).rows[0].count).toBe(0);
+    expect(engineCalls).toEqual([]);
     expect(await memory.admitFromAgentFinding(reviewerContext,saved.id))
       .toEqual({status:'PENDING',reason:'CONTRACT_UNAVAILABLE'});
-    expect((await pool.query(`SELECT count(*)::integer count FROM motive.hypothesis_submission_deliveries`)).rows[0].count).toBe(0);
+    expect((await pool.query(`SELECT count(*)::integer count FROM motive.hypothesis_submission_deliveries
+      WHERE source_submission_id=$1`,[source.submissionId])).rows[0].count).toBe(0);
     const policy=await policies.approve(owner,{projectSlug:'circle-packing',scopeId,workOrderId,
       idempotencyKey:`memory-policy-${randomUUID()}`,approvedApiBaseUrl:'https://engine.invalid/api/v1',
       contract:PINNED_REVIEWED_WRITEBACK_CONTRACT},true);

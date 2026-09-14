@@ -644,7 +644,8 @@ export class HypothesisSubmissionAdmissionService{
           surfaceDigest:row.reviewed_contract_surface_digest,implementationDigest:row.reviewed_implementation_digest});
         if(!retained)return{status:'PENDING',reason:'CONTRACT_UNAVAILABLE'} as const;
         const policyId=policyIdFromPrincipal(text(row,'created_by_actor_id'));
-        if(!policyId||row.delivery_mode!==deliveryMode)return{status:'PENDING',reason:'MEMORY_UNAVAILABLE'} as const;contract=retained;
+        if(!policyId)return{status:'PENDING',reason:'OWNER_APPROVAL_REQUIRED'} as const;
+        if(row.delivery_mode!==deliveryMode)return{status:'PENDING',reason:'MEMORY_UNAVAILABLE'} as const;contract=retained;
         if(deliveryMode==='APPEND_EXISTING'&&digestCanonicalJson(row.target_binding)!==digestCanonicalJson(finding.review_package.source.target))
           return{status:'PENDING',reason:'MEMORY_UNAVAILABLE'} as const;
         binding={scopeId:text(row,'scope_id'),apiBaseUrl:text(row,'engine_api_base_url'),
