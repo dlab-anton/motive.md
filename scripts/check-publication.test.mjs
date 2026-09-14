@@ -33,8 +33,13 @@ function cleanup(root) {
   rmSync(root, { recursive: true, force: true });
 }
 
-function run(root) {
-  return spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8', windowsHide: true });
+function run(root, environment = {}) {
+  return spawnSync(process.execPath, [checker], {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, ...environment },
+    windowsHide: true,
+  });
 }
 
 test('scans tracked and untracked publication files while honoring env-example exceptions', () => {
@@ -122,7 +127,7 @@ test('fails closed outside a Git worktree', () => {
   const root = join(scratchRoot, `publication-check-${randomUUID()}`);
   mkdirSync(root, { recursive: true });
   try {
-    const result = run(root);
+    const result = run(root, { GIT_CEILING_DIRECTORIES: scratchRoot });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /readable Git worktree is required/);
   } finally { cleanup(root); }
