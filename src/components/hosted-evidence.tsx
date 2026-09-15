@@ -1,38 +1,11 @@
-import { useState } from 'react';
 import { ArrowUpRight, CheckCircle2, Clock3, FileText } from 'lucide-react';
-import type { HostedCirclePublicResults, HostedCircleResultSummary, ReviewHostedCircleResultInput } from '@/lib/hosted-results';
-import { useProjectMutation } from '@/lib/project-api';
-import { Button } from './ui/button';
-import { Label } from './ui/label';
+import type { HostedCirclePublicResults, HostedCircleResultSummary } from '@/lib/hosted-results';
 import { HostedInvestigation } from './hosted-investigation';
 
 export const hostedResultPath = (id: string) => `/api/public/projects/circle-packing/hosted-results/${encodeURIComponent(id)}`;
 
-function HostedReview({ result }: { result: HostedCircleResultSummary }) {
-  const mutation = useProjectMutation<unknown>();
-  const [decision, setDecision] = useState<'ACCEPTED' | 'REJECTED'>(result.status === 'VALID' ? 'ACCEPTED' : 'REJECTED');
-  const [rationale, setRationale] = useState('');
-  const [saved, setSaved] = useState(false);
-  if (saved) return <p role="status">Review recorded. Updating the project…</p>;
-  return <details className="submission-review"><summary>Review this result</summary>
-    <p>Inspect the coordinates and evaluator report. Acceptance retains this result; claims about a better method or a world record need their own evidence. The project requires an independent reviewer.</p>
-    <form onSubmit={event => {
-      event.preventDefault();
-      const input: ReviewHostedCircleResultInput = { decision, rationale: rationale.trim(), expected: {
-        attemptId: result.attemptId, artifactManifestDigest: result.artifactManifestDigest,
-        evaluationProfileDigest: result.evaluationProfileDigest, reportDigest: result.reportDigest,
-      } };
-      void mutation.submit(`/api/hosted-results/${result.id}/reviews`, input).then(value => { if (value) setSaved(true); });
-    }}>
-      <Label htmlFor={`hosted-decision-${result.id}`}>Decision</Label>
-      <select id={`hosted-decision-${result.id}`} value={decision} onChange={event => setDecision(event.target.value as 'ACCEPTED' | 'REJECTED')} disabled={mutation.busy || mutation.retryPending}>
-        <option value="ACCEPTED" disabled={result.status !== 'VALID'}>Accept this checked result</option><option value="REJECTED">Decline acceptance</option>
-      </select>
-      <Label htmlFor={`hosted-reason-${result.id}`}>Reason for your decision</Label>
-      <input id={`hosted-reason-${result.id}`} required minLength={10} maxLength={1000} value={rationale} onChange={event => setRationale(event.target.value)} disabled={mutation.busy || mutation.retryPending} />
-      <Button type="submit" size="sm" disabled={mutation.busy || (!mutation.retryPending && (rationale.trim().length < 10 || (decision === 'ACCEPTED' && result.status !== 'VALID')))}>{mutation.busy ? 'Saving review…' : mutation.retryPending ? 'Retry this review' : 'Record decision'}</Button>
-    </form>{mutation.error ? <p role="alert" className="action-error">{mutation.error}</p> : null}
-  </details>;
+function HostedReview(_props: { result: HostedCircleResultSummary }) {
+  return null;
 }
 
 export function HostedEvidence({ data, canReview }: { data: HostedCirclePublicResults | null; canReview: boolean }) {

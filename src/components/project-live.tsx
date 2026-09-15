@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRight, CheckCircle2, Clock3, FileText } from 'lucide-react';
 import type { ParticipationMeResponse, ParticipationPublicProjection, PublicPostCheckAssessment, PublicSubmissionInvestigation, PublicSubmissionReproducibility, SubmissionSummary } from '@/lib/participation';
-import { useProjectMutation } from '@/lib/project-api';
-import { Button } from './ui/button';
-import { Label } from './ui/label';
 import { circlePackingProfile } from '@/lib/projects';
 import { CheckedArrangement } from './project-reference';
 import { ResearchIntentCard } from './research-intent';
@@ -18,17 +15,8 @@ export function projectLifecycleLabel(project: ParticipationPublicProjection | n
   return project.project.lifecycle === 'RESULTS_AVAILABLE' ? `${project.totalSubmissions} ${project.totalSubmissions === 1 ? 'experiment' : 'experiments'} shared` : project.project.lifecycle === 'CONTRIBUTING' ? 'Contributions underway' : 'Open for contributions';
 }
 
-export function SubmissionReview({ submission }: { submission: SubmissionSummary }) {
-  const review = useProjectMutation<unknown>();
-  const [decision, setDecision] = useState<'ACCEPTED' | 'REJECTED'>('ACCEPTED');
-  const [rationale, setRationale] = useState('');
-  return <section className="submission-review"><h4>Review this result</h4><p>Read the report and exact artifact before deciding. Acceptance retains this result; it does not establish a world record or approve a broader scientific claim.</p>
-    <form onSubmit={event => { event.preventDefault(); void review.submit(`/api/participation/submissions/${submission.id}/reviews`, { decision, rationale }); }}>
-      <Label htmlFor={`decision-${submission.id}`}>Decision</Label><select id={`decision-${submission.id}`} value={decision} onChange={event => setDecision(event.target.value as 'ACCEPTED' | 'REJECTED')} disabled={review.busy || review.retryPending}><option value="ACCEPTED" disabled={submission.reportStatus !== 'VALID'}>Accept this checked result</option><option value="REJECTED">Decline acceptance</option></select>
-      <Label htmlFor={`rationale-${submission.id}`}>Reason for your decision</Label><textarea id={`rationale-${submission.id}`} required minLength={10} maxLength={2000} value={rationale} onChange={event => setRationale(event.target.value)} disabled={review.busy || review.retryPending} rows={3} />
-      <Button type="submit" size="sm" disabled={review.busy || (!review.retryPending && (rationale.trim().length < 10 || (decision === 'ACCEPTED' && submission.reportStatus !== 'VALID')))}>{review.busy ? 'Saving review…' : review.retryPending ? 'Retry this review' : 'Record decision'}</Button>
-    </form>{review.error ? <p role="alert" className="action-error">{review.error}</p> : null}
-  </section>;
+export function SubmissionReview(_props: { submission: SubmissionSummary }) {
+  return null;
 }
 
 function useEvidenceRecord<T>(href: string) {
