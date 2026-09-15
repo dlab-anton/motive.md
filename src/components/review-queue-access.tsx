@@ -4,6 +4,7 @@ import { useProjectMutation, useProjectResource } from '@/lib/project-api';
 import type { CreateReviewQueueGrantResponse, ReviewQueueGrant, ReviewQueueGrantList } from '@/lib/review-queue';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 const path = '/api/participation/review-queue-agent-access';
 
@@ -80,6 +81,7 @@ export function ReviewQueueAccess() {
 }
 
 function ReviewSession({ grant, stale, reload, onEnd }: { grant: ReviewQueueGrant; stale: boolean; reload: () => void; onEnd?: () => void }) {
+  const slug = useProjectSlug();
   const revoke = useProjectMutation<{ grant: ReviewQueueGrant }>();
   const [ended, setEnded] = useState(false);
   const active = grant.status === 'ACTIVE' && !ended;
@@ -93,7 +95,7 @@ function ReviewSession({ grant, stale, reload, onEnd }: { grant: ReviewQueueGran
   return <li className="review-session-card">
     <div className="review-session-status"><strong>{title}</strong><span>{grant.decisionsUsed} / {grant.maxDecisions} reviews recorded</span></div>
     <progress value={grant.decisionsUsed} max={grant.maxDecisions} aria-label="Review session decisions recorded" />
-    {active && current ? <a className="review-session-question" href={`/?project=circle-packing&tab=updates#research-${current.submissionId}`}>{current.question || 'Open the assigned experiment'} ↗</a> : null}
+    {active && current ? <a className="review-session-question" href={`${projectLink(slug)}&tab=updates#research-${current.submissionId}`}>{current.question || 'Open the assigned experiment'} ↗</a> : null}
     {active && !grant.firstSeenAt ? <p>Give your agent the guide and session key. Keep its application running.</p> : null}
     {active && grant.firstSeenAt && !current ? <p>No experiment is assigned. Your agent can request the next eligible review.</p> : null}
     {grant.lastSeenAt ? <p className="field-hint">Last heard <time dateTime={grant.lastSeenAt}>{new Date(grant.lastSeenAt).toLocaleString()}</time>.</p> : null}

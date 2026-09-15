@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRight, CheckCircle2, Clock3, FileText } from 'lucide-react';
 import type { ParticipationMeResponse, ParticipationPublicProjection, PublicPostCheckAssessment, PublicSubmissionInvestigation, PublicSubmissionReproducibility, SubmissionSummary } from '@/lib/participation';
-import { circlePackingProfile } from '@/lib/projects';
 import { CheckedArrangement } from './project-reference';
 import { ResearchIntentCard } from './research-intent';
 import { researchDigest } from '@/lib/research-digest';
 import { useSubmissionOwnership } from '@/lib/submission-ownership';
 import { ArrangementComparison } from './arrangement-comparison';
 import { useLocation } from 'react-router-dom';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
+import { CheckedScheme } from './matmul-reference';
+import { projectFamilyOf } from '@/lib/project-slug';
 
 export function projectLifecycleLabel(project: ParticipationPublicProjection | null) {
   if (!project) return 'Checking activity';
@@ -63,18 +65,20 @@ function InvestigationRecord({ href, hasPostCheck }: { href: string; hasPostChec
   </section>;
 }
 
-function exactGain(score: string, reference: string = circlePackingProfile.laterReference.score): string {
+function exactGain(score: string, reference: string, direction: 'MAXIMIZE' | 'MINIMIZE' = 'MAXIMIZE'): string {
   const parts = [score, reference].map(value => value.split('.'));
   const precision = Math.max(...parts.map(value => (value[1] ?? '').length));
   const integers = parts.map(([whole, fraction = '']) => BigInt(whole! + fraction.padEnd(precision, '0')));
-  const delta = integers[0]! - integers[1]!;
+  const delta = direction === 'MINIMIZE' ? integers[1]! - integers[0]! : integers[0]! - integers[1]!;
   const digits = (delta < 0n ? -delta : delta).toString().padStart(precision + 1, '0');
   const value = precision ? `${digits.slice(0, -precision)}.${digits.slice(-precision)}`.replace(/0+$/, '').replace(/\.$/, '') : digits;
   return `${delta > 0n ? '+' : delta < 0n ? '−' : ''}${value}`;
 }
 
 function SubmittedArrangement({ submission }: { submission: SubmissionSummary }) {
+  const slug = useProjectSlug();
   if (!submission.exactScore) return null;
+  if (projectFamilyOf(slug) === 'matmul') return <section className="submission-arrangement"><h4>{projectWords(slug).figure}</h4><CheckedScheme submitted candidate={{ artifactUrl: submission.artifactHref, artifactSha256: submission.artifactSha256, score: submission.exactScore }} /></section>;
   return <section className="submission-arrangement"><h4>Circle arrangement</h4><CheckedArrangement submitted candidate={{ artifactUrl: submission.artifactHref,
     artifactSha256: submission.artifactSha256, score: submission.exactScore }} /></section>;
 }
@@ -104,30 +108,32 @@ function SubmissionEvidenceRow({ submission, update, earlier, owned, canReview, 
   canReview: boolean;
   deepLinked: boolean;
 }) {
+  const slug = useProjectSlug();
+  const words = projectWords(slug);
   const [open, setOpen] = useState(deepLinked);
   useEffect(() => { if (deepLinked) setOpen(true); }, [deepLinked]);
   const digest = update ? researchDigest(update) : null;
-  const earlierGain = submission.exactScore && earlier?.exactScore ? exactGain(submission.exactScore, earlier.exactScore) : null;
+  const earlierGain = submission.exactScore && earlier?.exactScore ? exactGain(submission.exactScore, earlier.exactScore, words.direction) : null;
   const title = submission.reportStatus === 'VALID'
     ? earlierGain?.startsWith('−') ? 'An earlier candidate remains ahead'
       : earlierGain === '0' ? 'A valid candidate matching an earlier score'
-        : submission.exceedsReference ? 'A valid candidate above the reference' : 'A valid candidate without an improvement'
+        : submission.exceedsReference ? words.improvement : 'A valid candidate without an improvement'
     : submission.reportStatus === 'REJECTED' ? 'This candidate did not pass the check' : 'This test was inconclusive';
   return <details className="task-row result-row" id={`submission-${submission.id}`} open={open}
     onToggle={event => setOpen(event.currentTarget.open)}>
     <summary className="result-row-summary">
       <span className="task-agent" title={submission.agentName}>{submission.agentName}</span>
       <strong className="task-title" title={digest?.question || title}>{digest?.question || title}</strong>
-      <span className={`task-status${submission.reportStatus === 'VALID' ? ' is-complete' : ''}`} title="Geometry check; finding acceptance is separate">{submission.reportStatus === 'VALID' ? 'Valid' : submission.reportStatus === 'REJECTED' ? 'Rejected' : 'Inconclusive'}</span>
+      <span className={`task-status${submission.reportStatus === 'VALID' ? ' is-complete' : ''}`} title={words.checkTitle}>{submission.reportStatus === 'VALID' ? 'Valid' : submission.reportStatus === 'REJECTED' ? 'Rejected' : 'Inconclusive'}</span>
       <time dateTime={submission.createdAt}>{new Date(submission.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</time>
     </summary>
     {open ? <div className="result-row-detail">
       {submission.modelName ? <p className="field-hint">{submission.modelName} · contributor-reported model</p> : null}
-      {submission.exactScore ? <div className="submission-score"><span>Exact sum of radii</span><strong>{submission.exactScore}</strong><p><strong className="submission-gain">{exactGain(submission.exactScore)}</strong> compared with the frozen reference.</p>{earlier && earlierGain !== null && submission.reportStatus === 'VALID' ? <ArrangementComparison current={submission} earlier={earlier} gain={earlierGain} /> : null}</div> : <p className="submission-explanation">No valid score was established by this check. The report below explains the result.</p>}
+      {submission.exactScore ? <div className="submission-score"><span>{words.objective}</span><strong>{submission.exactScore}</strong><p><strong className="submission-gain">{exactGain(submission.exactScore, words.referenceScore, words.direction)}</strong> compared with the frozen reference.</p>{earlier && earlierGain !== null && submission.reportStatus === 'VALID' ? <ArrangementComparison current={submission} earlier={earlier} gain={earlierGain} /> : null}</div> : <p className="submission-explanation">No valid score was established by this check. The report below explains the result.</p>}
       <div className="submission-acceptance"><Clock3 /><span>{submission.acceptance === 'ACCEPTED' ? 'Accepted by a project reviewer' : submission.acceptance === 'REJECTED' ? 'Acceptance declined' : 'Awaiting project review'}</span><time dateTime={submission.createdAt}>{new Date(submission.createdAt).toLocaleString()}</time></div>
       {submission.reportStatus === 'VALID' && submission.exactScore ? <SubmittedArrangement submission={submission} /> : null}
-      {update ? <a className="inline-link evidence-research-link" href={`/?project=circle-packing&tab=updates#research-${submission.id}`}>Read the research behind this result <ArrowUpRight /></a> : submission.investigationHref ? <a className="inline-link evidence-research-link" href={submission.investigationHref}>Read the research record <ArrowUpRight /></a> : null}
-      <section className="submission-files"><h4>Evidence files</h4><div className="evidence-file-links"><a href={submission.artifactHref} target="_blank" rel="noreferrer">Circle positions and sizes<ArrowUpRight /></a><a href={submission.reportHref} target="_blank" rel="noreferrer">Exact geometry check<ArrowUpRight /></a></div></section>
+      {update ? <a className="inline-link evidence-research-link" href={`${projectLink(slug)}&tab=updates#research-${submission.id}`}>Read the research behind this result <ArrowUpRight /></a> : submission.investigationHref ? <a className="inline-link evidence-research-link" href={submission.investigationHref}>Read the research record <ArrowUpRight /></a> : null}
+      <section className="submission-files"><h4>Evidence files</h4><div className="evidence-file-links"><a href={submission.artifactHref} target="_blank" rel="noreferrer">{words.artifact}<ArrowUpRight /></a><a href={submission.reportHref} target="_blank" rel="noreferrer">{words.report}<ArrowUpRight /></a></div></section>
       {submission.reproducibilityHref ? <section className="submission-files"><h4>Reproduce this experiment</h4><ReproducibilityFiles key={submission.reproducibilityHref} href={submission.reproducibilityHref} /></section> : null}
       {canReview && owned === false && submission.acceptance === 'PENDING' ? <SubmissionReview submission={submission} /> : null}
     </div> : null}
@@ -135,6 +141,7 @@ function SubmissionEvidenceRow({ submission, update, earlier, owned, canReview, 
 }
 
 export function SubmittedEvidence({ data, me, accountId = null }: { data: ParticipationPublicProjection | null; me: ParticipationMeResponse | null; accountId?: string | null }) {
+  const slug = useProjectSlug();
   const location = useLocation();
   const ownership = useSubmissionOwnership(accountId, data?.submissions.map(item => item.id) ?? []);
   if (!data?.submissions.length) return <p>{data ? 'No community submissions have arrived yet. The checked starting reference is below.' : 'Loading submitted evidence…'}</p>;
@@ -145,7 +152,7 @@ export function SubmittedEvidence({ data, me, accountId = null }: { data: Partic
   for (const submission of [...data.submissions].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
     if (strongest && strongest.createdAt < submission.createdAt) earlierCandidates.set(submission.id, strongest);
     if (submission.reportStatus === 'VALID' && submission.exactScore
-        && (!strongest?.exactScore || exactGain(submission.exactScore, strongest.exactScore).startsWith('+'))) strongest = submission;
+        && (!strongest?.exactScore || exactGain(submission.exactScore, strongest.exactScore, projectWords(slug).direction).startsWith('+'))) strongest = submission;
   }
   return <div className="submitted-evidence">{ownership.unavailable ? <p className="field-hint">Your contribution labels could not be checked. <button className="inline-link" onClick={ownership.reload}>Retry personal view</button></p> : null}{data.submissions.map(submission => {
     const update = data.researchUpdates?.find(item => item.submissionId === submission.id);

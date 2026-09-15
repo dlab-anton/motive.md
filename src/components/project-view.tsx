@@ -14,9 +14,10 @@ import { MatmulPitch } from './project-pitch-matmul';
 import { useProjectResource } from '@/lib/project-api';
 import { STATIC_PROJECT_POLL_INTERVAL_MS } from '@/lib/project-resource-policy';
 import { journalIdPattern } from '@/lib/research-journal';
-import type { ParticipationPublicProjection } from '@/lib/participation';
+import type { ParticipationMeResponse, ParticipationPublicProjection } from '@/lib/participation';
 import type { ResearchScopePublic } from '@/lib/research-memory';
 import { ProjectGoal } from './project-goal';
+import { DEFAULT_PROJECT_SLUG, ProjectSlugContext, accountProjectPath } from '@/lib/project-slug';
 
 /** Family-specific pieces of a project page: the pitch and the local checker. */
 const families: Record<ProjectFamily, { Pitch: (props: { project: Project }) => ReactElement; Checker: () => ReactElement }> = {
@@ -37,10 +38,13 @@ function ProjectPreparation({ project }: { project: Project }) {
   </section>;
 }
 
-export function ProjectView({ project, controls }: { project: Project; controls: SupportControls }) {
+export function ProjectView({ project, controls: appControls }: { project: Project; controls: SupportControls }) {
   const family = families[project.family];
   const live = useProjectResource<ParticipationPublicProjection>(project.live ? `/api/public/projects/${project.id}` : null);
   const scope = useProjectResource<ResearchScopePublic | null>(project.live ? `/api/public/projects/${project.id}/research-scope` : null, { intervalMs: STATIC_PROJECT_POLL_INTERVAL_MS });
+  // The first project keeps the app-level agent activity; later projects read their own account routes.
+  const ownActivity = useProjectResource<ParticipationMeResponse>(appControls.user && project.live && project.id !== DEFAULT_PROJECT_SLUG ? accountProjectPath(project.id, '/me') : null);
+  const controls: SupportControls = project.id === DEFAULT_PROJECT_SLUG ? appControls : { ...appControls, agentActivity: ownActivity };
   const [params] = useSearchParams();
   const location = useLocation();
   const selected = params.get('experiment') ?? (location.hash.startsWith('#research-') ? location.hash.slice(10)
@@ -57,7 +61,7 @@ export function ProjectView({ project, controls }: { project: Project; controls:
     if (record) next.set('experiment', selected);
     return <Navigate replace to={{ pathname: location.pathname, search: `?${next}`, hash: record ? '' : location.hash || '#project-tasks' }} />;
   }
-  return <>
+  return <ProjectSlugContext.Provider value={project.id}>
     <Button variant="ghost" size="sm" className="back-link" asChild><Link to="/"><ArrowLeft />All projects</Link></Button>
     {record ? <p className="record-project-name">{project.title}</p> : <header className="detail-heading project-pitch-heading">
       <p className="eyebrow">Open project · {project.category}</p><h1>{project.title}</h1>
@@ -72,7 +76,8 @@ export function ProjectView({ project, controls }: { project: Project; controls:
       {project.live ? <>
         <AgentParticipation controls={controls} researchUpdates={live.data?.researchUpdates} />
         <ResearchContributors data={live.data} />
-        <section className="project-support project-support-open" aria-labelledby="project-support-title"><h2 id="project-support-title">Support the project</h2><BackingPanel project={project} controls={controls} /></section>
+        {project.id === DEFAULT_PROJECT_SLUG ? <section className="project-support project-support-open" aria-labelledby="project-support-title"><h2 id="project-support-title">Support the project</h2><BackingPanel project={project} controls={controls} /></section>
+          : <section className="project-support project-support-open" aria-labelledby="project-support-title"><h2 id="project-support-title">Support the project</h2><p className="field-hint">Following is open now. Credit backing for this project opens with its first funded capacity; agents bring their own compute today.</p></section>}
       </> : <ProjectPreparation project={project} />}
     </aside></div>
     {pitch && project.live ? <section id="project-tasks" className="project-task-section" aria-label="Project task queue">
@@ -95,5 +100,5 @@ export function ProjectView({ project, controls }: { project: Project; controls:
         <a className="inline-link" href="https://hypothesis.md/" target="_blank" rel="noreferrer">Explore the shared memory behind Motive <ArrowUpRight aria-hidden="true" /></a>
       </section>
     </section> : null}
-  </>;
+  </ProjectSlugContext.Provider>;
 }

@@ -5,7 +5,7 @@ export type ReviewQueueGrantStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED' | 'EXHAUST
 
 export type ReviewQueueGrant = Readonly<{
   id: string;
-  projectSlug: 'circle-packing';
+  projectSlug: string;
   reviewKind: ReviewQueueKind;
   status: ReviewQueueGrantStatus;
   maxDecisions: number;

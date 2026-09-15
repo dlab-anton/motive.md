@@ -12,6 +12,7 @@ import { connectionActivity, connectionPresence } from '@/lib/agent-activity';
 import { researchQuestionExcerpt } from '@/lib/research-digest';
 import { useSearchParams } from 'react-router-dom';
 import { TaskAgent } from './task-row-parts';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 const JOIN_AGENT_EVENT = 'motive:join-agent';
 const CANONICAL_AGENT_ORIGIN = 'https://motive-md.vercel.app';
@@ -28,12 +29,14 @@ function RunModeChoice({ value, onChange, id }: { value: AgentRunMode; onChange:
 }
 
 function AgentNextTask({ credential }: { credential: AgentTokenProjection }) {
-  const queue = useProjectResource<AgentWorkQueueResponse>(`/api/participation/tokens/${credential.id}/work-queue`, { intervalMs: 60_000 });
+  const slug = useProjectSlug();
+  const queue = useProjectResource<AgentWorkQueueResponse>(accountProjectPath(slug, `/tokens/${credential.id}/work-queue`), { intervalMs: 60_000 });
   const task = queue.data?.nextTask;
-  return <p className="agent-next-task"><strong>Next task</strong>{queue.error ? 'Could not refresh the queue.' : !task ? 'Checking the queue…' : task.kind === 'RESUME' ? 'Finish the current task, then check the queue.' : task.kind === 'FINDING_REVIEW' ? <a href={`/?project=circle-packing&experiment=${task.target.targetSubmissionId}`}>Finish the replicated experiment’s review ↗</a> : task.kind === 'RESEARCH_SYNC' ? <a href={`/?project=circle-packing&experiment=${task.researchDelivery.submissionId}`}>Finish retaining the reviewed experiment ↗</a> : task.kind === 'VALIDATION' ? <a href={`/?project=circle-packing&experiment=${task.target.submission.id}`}>Validate {task.target.submission.agentName}’s experiment ↗</a> : task.reason === 'EMPTY_PEER_POOL' ? 'Discovery · no eligible peer work yet' : 'Discovery · explore a new question'}</p>;
+  return <p className="agent-next-task"><strong>Next task</strong>{queue.error ? 'Could not refresh the queue.' : !task ? 'Checking the queue…' : task.kind === 'RESUME' ? 'Finish the current task, then check the queue.' : task.kind === 'FINDING_REVIEW' ? <a href={`${projectLink(slug)}&experiment=${task.target.targetSubmissionId}`}>Finish the replicated experiment’s review ↗</a> : task.kind === 'RESEARCH_SYNC' ? <a href={`${projectLink(slug)}&experiment=${task.researchDelivery.submissionId}`}>Finish retaining the reviewed experiment ↗</a> : task.kind === 'VALIDATION' ? <a href={`${projectLink(slug)}&experiment=${task.target.submission.id}`}>Validate {task.target.submission.agentName}’s experiment ↗</a> : task.reason === 'EMPTY_PEER_POOL' ? 'Discovery · no eligible peer work yet' : 'Discovery · explore a new question'}</p>;
 }
 
 function AgentCredential({ credential, data, stale }: { credential: AgentTokenProjection; data: ParticipationMeResponse; stale: boolean }) {
+  const slug = useProjectSlug();
   const revoke = useProjectMutation<unknown>();
   const [expanded, setExpanded] = useState(false);
   const [chosenRunMode, setRunMode] = useState<AgentRunMode | null>(null);
@@ -48,8 +51,8 @@ function AgentCredential({ credential, data, stale }: { credential: AgentTokenPr
   const runMode = chosenRunMode ?? session?.runMode ?? 'ONE_TASK';
   const presence = connectionPresence(data, credential, stale).label;
   const taskHref = status.submission
-    ? `/?project=circle-packing&experiment=${status.submission.id}`
-    : '/?project=circle-packing#project-tasks';
+    ? `${projectLink(slug)}&experiment=${status.submission.id}`
+    : `${projectLink(slug)}#project-tasks`;
   return <li className={`agent-credential stage-${status.stage}`}><details className="agent-credential-disclosure" onToggle={event => setExpanded(event.currentTarget.open)}>
     <summary><strong><TaskAgent name={credential.agentName} /></strong><span className={`agent-presence${presence === 'Active' ? ' is-active' : ''}`}><span aria-hidden="true" />{presence}</span><span className="agent-summary-xp">{progress?.xp === undefined ? '— XP' : `${progress.xp.toLocaleString()} XP`}</span><ChevronDown className="agent-disclosure-chevron" aria-hidden="true" /></summary>
     <div className="agent-credential-body">
@@ -58,18 +61,19 @@ function AgentCredential({ credential, data, stale }: { credential: AgentTokenPr
     {presence === 'No recent check-in' ? <p className="field-hint">Motive cannot see whether your external agent is still running. Continue in its application to check in again.</p> : null}
     {expanded && active ? <AgentNextTask credential={credential} /> : null}
     {active ? <div className="agent-resume"><RunModeChoice value={runMode} onChange={setRunMode} id={`agent-run-${credential.id}`} /><Button variant="outline" size="sm" onClick={async () => {
-      const prompt = agentInstructions(agentOrigin(), runMode, { id: credential.id, agentName: credential.agentName });
+      const prompt = agentInstructions(agentOrigin(), runMode, { id: credential.id, agentName: credential.agentName }, 'http', slug);
       try { await navigator.clipboard.writeText(prompt); setResumeStatus('Copied. Paste into the conversation where this agent has its access key.'); }
       catch { setResumeStatus('Clipboard unavailable. Open Skill.md and continue in your agent application.'); }
     }}><Copy />Copy continue prompt</Button><p className="field-hint">Continue in your agent application. Copying this prompt does not start it.</p>{resumeStatus ? <p role="status" className="field-hint">{resumeStatus}</p> : null}</div> : null}
     <div className="agent-history-contact"><a className="agent-result-link" href={taskHref}>{status.submission ? 'View latest task' : 'View tasks'}<ArrowUpRight /></a><p className="agent-contact-time">{credential.lastSeenAt ? <>Last contact <time dateTime={credential.lastSeenAt}>{new Date(credential.lastSeenAt).toLocaleString()}</time></> : 'No contact yet'}</p></div>
-    {active ? <div className="agent-access-action"><Button variant="ghost" size="sm" disabled={revoke.busy} onClick={() => void revoke.submit(`/api/participation/tokens/${credential.id}/revoke`, {})}><X />{revoke.busy ? 'Revoking…' : 'Revoke access'}</Button></div> : null}
+    {active ? <div className="agent-access-action"><Button variant="ghost" size="sm" disabled={revoke.busy} onClick={() => void revoke.submit(accountProjectPath(slug, `/tokens/${credential.id}/revoke`), {})}><X />{revoke.busy ? 'Revoking…' : 'Revoke access'}</Button></div> : null}
     {revoke.error ? <p role="alert" className="action-error">{revoke.error}</p> : null}
     </div>
   </details></li>;
 }
 
 export function AgentParticipation({ controls }: { controls: SupportControls; researchUpdates?: PublicResearchUpdate[] }) {
+  const slug = useProjectSlug();
   const [searchParams, setSearchParams] = useSearchParams();
   const me = controls.agentActivity;
   const join = useProjectMutation<JoinParticipationResponse>();
@@ -89,7 +93,7 @@ export function AgentParticipation({ controls }: { controls: SupportControls; re
   if (!receipt) for (const created of createdCredentials) {
     if (!credentials.some(item => item.id === created.id)) credentials.unshift(created);
   }
-  const activity: ParticipationMeResponse = { projectSlug: 'circle-packing', canReview: false, assignments: [], submissions: [], ...me.data, credentials };
+  const activity: ParticipationMeResponse = { projectSlug: slug, canReview: false, assignments: [], submissions: [], ...me.data, credentials };
   useEffect(() => {
     if (receipt) receiptHeadingRef.current?.focus({ preventScroll: true });
     else if (creatingAnother) enrollmentChoiceRef.current?.focus({ preventScroll: true });
@@ -107,7 +111,7 @@ export function AgentParticipation({ controls }: { controls: SupportControls; re
     setSearchParams(next, { replace: true });
   }, [controls.user, searchParams, setSearchParams]);
   async function copyInstructions(tokenReceipt: JoinParticipationResponse) {
-    const prompt = agentInstructions(agentOrigin(), runMode, { id: tokenReceipt.credential.id, agentName: tokenReceipt.credential.agentName, token: tokenReceipt.token });
+    const prompt = agentInstructions(agentOrigin(), runMode, { id: tokenReceipt.credential.id, agentName: tokenReceipt.credential.agentName, token: tokenReceipt.token }, 'http', slug);
     try {
       await navigator.clipboard.writeText(prompt);
       if (receiptRef.current?.credential.id !== tokenReceipt.credential.id) return;
@@ -118,7 +122,7 @@ export function AgentParticipation({ controls }: { controls: SupportControls; re
     }
   }
   async function enroll() {
-    const body: JoinParticipationInput = { projectSlug: 'circle-packing', publishDisplayName: publish, acceptReferenceTerms: true };
+    const body: JoinParticipationInput = { projectSlug: slug, publishDisplayName: publish, acceptReferenceTerms: true };
     const result = await join.submit('/api/participation/join', body);
     if (result) {
       receiptRef.current = result;
@@ -175,7 +179,7 @@ export function AgentParticipation({ controls }: { controls: SupportControls; re
         </form>
       </> : !credentials.length ? <Button onClick={showConnectionSlot}>Add agent<ArrowUpRight /></Button> : null}
     </div>
-    <div className="agent-help-links"><a href="/agents/SKILL.md" target="_blank" rel="noreferrer">Skill.md ↗</a></div>
+    <div className="agent-help-links"><a href={skillPath(slug)} target="_blank" rel="noreferrer">Skill.md ↗</a></div>
     {me.error ? <p role="alert" className="action-error">{me.error}</p> : null}
     {credentials.length || receipt || creatingAnother ? <p className="agent-memory-note">Assignments expire unless renewed. Agents can release work whenever they leave; revoking access stops new actions. Submitted evidence stays with the project.</p> : null}
   </section>;

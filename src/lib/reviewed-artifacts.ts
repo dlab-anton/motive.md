@@ -1,4 +1,4 @@
-import { PARTICIPATION_PROJECT_SLUG } from './participation';
+import { DEFAULT_PROJECT_SLUG, publicProjectPath } from './project-slug';
 
 export const reviewedArtifactDigestPattern = /^[a-f0-9]{64}$/;
 const canonicalUuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -18,7 +18,7 @@ export type ReviewedArtifactItem = {
 
 export type ContributorReviewedArtifactsPage = {
   format: 'motive.contributor-reviewed-artifacts/0.1';
-  projectSlug: typeof PARTICIPATION_PROJECT_SLUG;
+  projectSlug: string;
   contributorId: string;
   items: ReviewedArtifactItem[];
   nextCursor: string | null;
@@ -32,9 +32,10 @@ export async function readContributorReviewedArtifacts(
   contributorId: string,
   after: string | null,
   signal: AbortSignal,
+  slug = DEFAULT_PROJECT_SLUG,
 ): Promise<ContributorReviewedArtifactsPage> {
   const cursor = after ? `?after=${encodeURIComponent(after)}` : '';
-  const path = `/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/contributors/${encodeURIComponent(contributorId)}/reviewed-artifacts${cursor}`;
+  const path = `${publicProjectPath(slug)}/contributors/${encodeURIComponent(contributorId)}/reviewed-artifacts${cursor}`;
   const response = await fetch(path, { signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
     credentials: 'same-origin', redirect: 'error' });
   if (!response.ok) throw new Error(response.status === 404
@@ -68,7 +69,7 @@ export async function readContributorReviewedArtifacts(
   });
   const nextCursor = page.nextCursor;
   if (page.format !== 'motive.contributor-reviewed-artifacts/0.1'
-    || page.projectSlug !== PARTICIPATION_PROJECT_SLUG || page.contributorId !== contributorId
+    || page.projectSlug !== slug || page.contributorId !== contributorId
     || typeof page.contributorId !== 'string' || !canonicalUuid.test(page.contributorId)
     || !validItems || !(nextCursor === null
       || typeof nextCursor === 'string' && reviewedArtifactDigestPattern.test(nextCursor))

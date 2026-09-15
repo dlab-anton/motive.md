@@ -10,8 +10,8 @@ import type {
 import type { ResearchDeliveryTargetSelection } from '../../src/lib/research-delivery-target.ts';
 import type { PublicResearchSummary } from '../../src/lib/research-summary.ts';
 
-const projectHref = '/api/public/projects/circle-packing' as const;
-const researchJournalHref = '/api/public/projects/circle-packing/research-updates' as const;
+const projectHrefFor = (slug: string) => `/api/public/projects/${slug}`;
+const researchJournalHrefFor = (slug: string) => `${projectHrefFor(slug)}/research-updates`;
 
 export type PublicResearchBriefTask = {
   submissionId: string;
@@ -23,7 +23,7 @@ export type PublicResearchBriefTask = {
   observedOutcome: PublicResearchUpdate['observedOutcome'];
   publicSummary: PublicResearchSummary | null;
   proposal?: string | null;
-  entryHref: `/api/public/projects/circle-packing/research-updates/${string}`;
+  entryHref: string;
 };
 
 export type PublicResearchBrief = {
@@ -36,8 +36,8 @@ export type PublicResearchBrief = {
   activeResearchIntents: PublicActiveResearchIntent[];
   recentResearchHandoffs: PublicResearchHandoff[];
   recentTasks: PublicResearchBriefTask[];
-  projectHref: typeof projectHref;
-  researchJournalHref: typeof researchJournalHref;
+  projectHref: string;
+  researchJournalHref: string;
   notice: 'This is a bounded orientation view. Contributor summaries and task completion do not establish finding acceptance. Read relevant full entries for detail and paginate the research journal for older work.';
 };
 
@@ -84,7 +84,7 @@ function handoff(value: PublicResearchHandoff): PublicResearchHandoff {
       declaredAt: value.intent.declaredAt } : null, interpretationStatus: value.interpretationStatus };
 }
 
-function task(value: PublicResearchUpdate): PublicResearchBriefTask {
+function task(value: PublicResearchUpdate, researchJournalHref: string): PublicResearchBriefTask {
   const publicSummary = value.publicSummary
     ? { question: value.publicSummary.question, finding: value.publicSummary.finding } : null;
   return { submissionId: value.submissionId, reportDigest: value.reportDigest, agentName: value.agentName,
@@ -96,6 +96,7 @@ function task(value: PublicResearchUpdate): PublicResearchBriefTask {
 }
 
 export function buildResearchBrief(projection: ParticipationPublicProjection): PublicResearchBrief {
+  const projectHref = projectHrefFor(projection.project.slug); const researchJournalHref = researchJournalHrefFor(projection.project.slug);
   return { format: 'motive.research-brief.public.v1',
     project: { slug: projection.project.slug, visibility: projection.project.visibility,
       lifecycle: projection.project.lifecycle, projectRevision: projection.project.projectRevision },
@@ -103,6 +104,6 @@ export function buildResearchBrief(projection: ParticipationPublicProjection): P
     activeAssignments: projection.activeAssignments, totalSubmissions: projection.totalSubmissions,
     activeResearchIntents: (projection.activeResearchIntents ?? []).map(activeIntent),
     recentResearchHandoffs: (projection.recentResearchHandoffs ?? []).map(handoff),
-    recentTasks: (projection.researchUpdates ?? []).map(task), projectHref, researchJournalHref,
+    recentTasks: (projection.researchUpdates ?? []).map(value => task(value, researchJournalHref)), projectHref, researchJournalHref,
     notice: 'This is a bounded orientation view. Contributor summaries and task completion do not establish finding acceptance. Read relevant full entries for detail and paginate the research journal for older work.' };
 }

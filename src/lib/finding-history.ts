@@ -1,5 +1,6 @@
 import type { FindingReviewHistoryDecision, FindingReviewHistoryPage } from './finding-assessment';
 import { validFindingReviewPublicDecision } from './finding-review-client';
+import { DEFAULT_PROJECT_SLUG, publicProjectPath } from './project-slug';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -58,9 +59,9 @@ export function parseFindingHistory(value:unknown,submissionId:string):FindingRe
   throw invalid();
 }
 
-export async function readFindingHistory(submissionId:string,before:string|null,signal:AbortSignal):Promise<FindingReviewHistoryPage>{
+export async function readFindingHistory(submissionId:string,before:string|null,signal:AbortSignal,slug=DEFAULT_PROJECT_SLUG):Promise<FindingReviewHistoryPage>{
   if(!isUuid(submissionId)||!(before===null||isUuid(before)))throw invalid();
-  const path=`/api/public/projects/circle-packing/submissions/${submissionId}/finding-review/history${before?`?before=${before}`:''}`;
+  const path=`${publicProjectPath(slug)}/submissions/${submissionId}/finding-review/history${before?`?before=${before}`:''}`;
   let response:Response;
   try{
     response=await fetch(path,{method:'GET',credentials:'same-origin',redirect:'error',cache:'no-store',

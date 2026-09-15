@@ -9,6 +9,7 @@ import { parseFindingPublic, parseFindingEligibility, parseFindingPreview, parse
 import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { FindingReviewHistory } from './finding-review-history';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 export const findingOutcomeLabel: Record<FindingOutcome, string> = {
   SUPPORTED: 'Expectation supported', CONTRADICTED: 'Expectation contradicted', INCONCLUSIVE: 'Question remains open',
@@ -58,8 +59,9 @@ export function ResearchFindingReview({ submission, own, canReview, open, onOpen
 function FindingReviewDetail({ submission, own, canReview, open }: {
   submission: SubmissionSummary; own: boolean; canReview: boolean; open: boolean;
 }) {
+  const slug = useProjectSlug();
   const id = submission.id;
-  const path = `/api/participation/submissions/${id}/finding-review`;
+  const path = accountProjectPath(slug, `/submissions/${id}/finding-review`);
   const [status, setStatus] = useState<FindingReviewPublicProjection | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
   const [eligibility, setEligibility] = useState<FindingReviewEligibility | null>(null);
@@ -88,7 +90,7 @@ function FindingReviewDetail({ submission, own, canReview, open }: {
     const readSignal = AbortSignal.any([signal, controller.signal]);
     setLoading(true); setReadError(''); setEligibility(null);
     const results = await Promise.allSettled([
-      readResponse(`/api/public/projects/circle-packing/submissions/${id}/finding-review`, readSignal, value => parseFindingPublic(value, id), undefined, false),
+      readResponse(`${publicProjectPath(slug)}/submissions/${id}/finding-review`, readSignal, value => parseFindingPublic(value, id), undefined, false),
       canReview && !own ? readResponse(`${path}/eligibility`, readSignal, value => parseFindingEligibility(value, id)) : Promise.resolve(null),
     ]);
     if (readSignal.aborted) return;
@@ -164,7 +166,7 @@ function FindingReviewDetail({ submission, own, canReview, open }: {
       <strong>{latest.decision === 'ACCEPT' ? findingOutcomeLabel[latest.outcome!] : 'Finding not accepted'}</strong>
       {latest.finding ? <p>{latest.finding}</p> : null}
       {latest.limitations ? <p><strong>Limits of this finding</strong><br />{latest.limitations}</p> : null}
-      {latest.novelty === 'DUPLICATE' ? <p>This repeats an <a href={`/?project=circle-packing&tab=updates#research-${latest.duplicateOfSubmissionId}`}>earlier accepted finding</a> and adds no distinct finding credit.</p> : null}
+      {latest.novelty === 'DUPLICATE' ? <p>This repeats an <a href={`${projectLink(slug)}&tab=updates#research-${latest.duplicateOfSubmissionId}`}>earlier accepted finding</a> and adds no distinct finding credit.</p> : null}
       <blockquote>{latest.rationale}</blockquote>
       <time dateTime={latest.reviewedAt}>Reviewed {new Date(latest.reviewedAt).toLocaleString()}</time>
       <details className="admission-exact-package"><summary>Evidence bound to this assessment</summary>

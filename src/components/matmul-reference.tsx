@@ -18,6 +18,38 @@ export function SchemeFigure({ witness, label }: { witness: MatmulWitness; label
   </svg>;
 }
 
+export type CheckedSchemeCandidate = { artifactUrl: string; artifactSha256: string; score: string };
+
+/** A submitted scheme, re-fetched, digest-verified and re-checked in the browser before it is drawn. */
+export function CheckedScheme({ candidate, submitted = false }: { candidate: CheckedSchemeCandidate; submitted?: boolean }) {
+  const [witness, setWitness] = useState<MatmulWitness | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch(candidate.artifactUrl, { signal: controller.signal });
+        if (!response.ok) throw new Error('Candidate unavailable');
+        const bytes = await response.arrayBuffer();
+        if (bytes.byteLength > MATMUL_MAX_BYTES) throw new Error('Candidate too large');
+        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        const hash = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+        if (hash !== candidate.artifactSha256.replace(/^sha256:/, '')) throw new Error('Candidate changed');
+        const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+        const checked = checkMatmulWitness(source);
+        if (!checked.ok || String(checked.report.rank) !== candidate.score) throw new Error('Candidate failed validation');
+        if (!controller.signal.aborted) setWitness(JSON.parse(source) as MatmulWitness);
+      } catch { if (!controller.signal.aborted) setFailed(true); }
+    })();
+    return () => controller.abort();
+  }, [candidate.artifactUrl, candidate.artifactSha256, candidate.score]);
+  return <figure className="reference-arrangement reference-scheme"><div className="arrangement-label"><span>{submitted ? 'The submitted scheme' : 'Best checked Motive candidate'}</span><span>U · V · W sign patterns</span></div>
+    {witness ? <SchemeFigure witness={witness} label={submitted ? `The submitted and exactly checked scheme with ${witness.rank} products` : `The best checked Motive scheme with ${witness.rank} products`} />
+      : <div className="arrangement-placeholder" role="status">{failed ? 'Preview unavailable. Download the checked scheme in Evidence.' : 'Loading the checked scheme…'}</div>}
+    <figcaption><strong>{candidate.score}</strong><span>Products · integer coefficients</span><small>{submitted ? 'Drawn from this submission’s exact scheme file. Each row is one product; the tensor check and review status are recorded separately above.' : 'Tensor check passed; review status is recorded separately.'}</small></figcaption>
+  </figure>;
+}
+
 export function MatmulReference({ referenceOnly = false }: { referenceOnly?: boolean }) {
   const [witness, setWitness] = useState<MatmulWitness | null>(null);
   const [failed, setFailed] = useState(false);

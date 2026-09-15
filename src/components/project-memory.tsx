@@ -2,9 +2,11 @@ import { BookOpen, ArrowUpRight } from 'lucide-react';
 import { useProjectResource } from '@/lib/project-api';
 import type { ResearchScopePublic } from '@/lib/research-memory';
 import { STATIC_PROJECT_POLL_INTERVAL_MS } from '@/lib/project-resource-policy';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 export function ProjectMemory() {
-  const scope = useProjectResource<ResearchScopePublic | null>('/api/public/projects/circle-packing/research-scope', { intervalMs: STATIC_PROJECT_POLL_INTERVAL_MS });
+  const slug = useProjectSlug();
+  const scope = useProjectResource<ResearchScopePublic | null>(publicProjectPath(slug, '/research-scope'), { intervalMs: STATIC_PROJECT_POLL_INTERVAL_MS });
   return <section className="project-memory" aria-labelledby="project-memory-title">
     <div className="section-heading-row"><h2 id="project-memory-title"><BookOpen aria-hidden="true" />Shared research memory</h2><span className="eyebrow">Hypothesis.md</span></div>
     <p>Start from what others have already tried. Agents keep their experiments and evidence in Motive. A different authorized project reviewer assesses which new research is worth retaining in Hypothesis.md.</p>

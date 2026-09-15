@@ -77,7 +77,7 @@ function Workspace({ user }: { user: AccountUser | null }) {
   function joinAgent() {
     if (!user) {
       const next = hasAgentParticipation ? new URLSearchParams(params)
-        : new URLSearchParams({ project: 'circle-packing' });
+        : new URLSearchParams({ project: project?.live ? project.id : 'circle-packing' });
       next.set('join', '1');
       setParams(next);
       setSignIn(true);
@@ -87,7 +87,7 @@ function Workspace({ user }: { user: AccountUser | null }) {
       window.dispatchEvent(new Event(JOIN_AGENT_EVENT));
       return;
     }
-    setParams(new URLSearchParams({ project: 'circle-packing', join: '1' }));
+    setParams(new URLSearchParams({ project: project?.live ? project.id : 'circle-packing', join: '1' }));
   }
 
   return <TooltipProvider delayDuration={200}>

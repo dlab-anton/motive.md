@@ -85,7 +85,7 @@ export const projects: Project[] = [{
   id: 'matmul-4x4x4',
   category: 'Math',
   family: 'matmul',
-  live: false,
+  live: true,
   challenge: 'Open challenge · ⟨4,4,4⟩ over the integers',
   tagline: 'Two 4×4 matrices. Forty-nine products. Can it be done with fewer?',
   title: 'Multiply 4×4 matrices in fewer than 49 products',

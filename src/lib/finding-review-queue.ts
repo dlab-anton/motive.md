@@ -1,4 +1,5 @@
 import { authenticatedFetch } from './account-fetch';
+import { DEFAULT_PROJECT_SLUG, accountProjectPath } from './project-slug';
 
 export type FindingQueueItem = {
   id: string;
@@ -79,9 +80,10 @@ export async function readFindingReviewQueue(
   before: string | null,
   signal: AbortSignal,
   kind: ReviewQueueKind = 'finding',
+  slug = DEFAULT_PROJECT_SLUG,
 ): Promise<FindingQueuePage> {
   if (!(before === null || typeof before === 'string' && UUID.test(before))) throw invalidResponse();
-  const path = `/api/participation/${kind === 'memory' ? 'memory' : 'finding'}-review-queue${before ? `?before=${encodeURIComponent(before)}` : ''}`;
+  const path = `${accountProjectPath(slug, `/${kind === 'memory' ? 'memory' : 'finding'}-review-queue`)}${before ? `?before=${encodeURIComponent(before)}` : ''}`;
   let response: Response;
   try {
     response = await authenticatedFetch(path, { method: 'GET', credentials: 'same-origin', redirect: 'error',

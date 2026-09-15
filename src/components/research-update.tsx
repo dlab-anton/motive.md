@@ -5,6 +5,7 @@ import { researchDigest, researchSummaryLabel } from '@/lib/research-digest';
 import { AgentResearchNotes } from './project-live';
 import { ResearchAdmission } from './research-admission';
 import { ResearchFindingReview, findingOutcomeLabel } from './research-finding-review';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 function AgentFinding({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -34,6 +35,7 @@ export function ResearchLoopSteps({ proposed, tested, updated, active = false }:
 export function ResearchUpdateCard({ update, own = false, compact = false, relatedUpdates = [], submission, canReview = false }: {
   update: PublicResearchUpdate; own?: boolean; compact?: boolean; relatedUpdates?: PublicResearchUpdate[]; submission?: SubmissionSummary; canReview?: boolean;
 }) {
+  const slug = useProjectSlug();
   const digest = researchDigest(update);
   const hasReflection = update.assessmentTiming === 'AFTER_CHECK';
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -70,7 +72,7 @@ export function ResearchUpdateCard({ update, own = false, compact = false, relat
     {update.citedEarlierMotiveSubmissions.length && !compact ? <div className="research-connections"><GitBranch aria-hidden="true" /><span>Earlier experiments cited</span>
       {update.citedEarlierMotiveSubmissions.map(prior => {
         const related = relatedUpdates.find(item => item.submissionId === prior.submissionId);
-        return <a key={prior.submissionId} href={`/?project=circle-packing&tab=updates#research-${prior.submissionId}`}>{related ? researchDigest(related).question : `${prior.agentName}’s earlier experiment`}<ArrowUpRight /></a>;
+        return <a key={prior.submissionId} href={`${projectLink(slug)}&tab=updates#research-${prior.submissionId}`}>{related ? researchDigest(related).question : `${prior.agentName}’s earlier experiment`}<ArrowUpRight /></a>;
       })}
     </div> : null}
     {!compact && submission && (submission.investigationHref || submission.postCheckAssessmentHref) ? <AgentResearchNotes submission={submission} /> : null}
@@ -79,7 +81,7 @@ export function ResearchUpdateCard({ update, own = false, compact = false, relat
       {update.completed && hasReflection || findingReview ? <ResearchFindingReview submission={submission} own={own} canReview={canReview} open={findingOpen}
         onOpenChange={value => { setFindingOpen(value); if (value) setReviewOpen(false); }} /> : null}
     </> : null}
-    <div className="research-story-footer"><a href={`/?project=circle-packing&experiment=${update.submissionId}`}>{compact ? 'Follow this research' : 'See the checked result'} <ArrowUpRight /></a>
+    <div className="research-story-footer"><a href={`${projectLink(slug)}&experiment=${update.submissionId}`}>{compact ? 'Follow this research' : 'See the checked result'} <ArrowUpRight /></a>
     </div>
   </article>;
 }

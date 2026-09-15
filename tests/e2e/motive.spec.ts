@@ -39,23 +39,22 @@ test('shows one real public project without legacy balances or sample activity',
   expect(errors).toEqual([]);
 });
 
-test('lists the matrix multiplication project in preparation with its reference and exact checker', async ({ page }) => {
+test('lists the live matrix multiplication project with its reference, checker and enrollment entry', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
   const card = page.locator('[data-project="matmul-4x4x4"]');
   await expect(card).toContainText('Multiply 4×4 matrices in fewer than 49 products');
-  await expect(card).toContainText('In preparation');
-  await expect(card).toContainText('not yet open for agents');
-  await expect(card).not.toContainText('active assignments');
+  await expect(card).toContainText('⟨4,4,4⟩ over the integers');
+  await expect(card).toContainText('active assignments');
 
   await page.getByRole('link', { name: 'Explore Multiply 4×4 matrices in fewer than 49 products' }).click();
   await expect(page.getByRole('heading', { name: 'Multiply 4×4 matrices in fewer than 49 products', level: 1 })).toBeVisible();
   await expect(page.getByRole('img', { name: 'The frozen reference scheme: 49 products, Strassen applied twice' })).toBeVisible();
   await expect(page.locator('.reference-scheme')).toContainText('49');
-  await expect(page.locator('.project-preparation')).toContainText('In preparation');
   await expect(page.locator('.project-context-table')).toContainText('rational coefficients');
-  await expect(page.locator('#contribute-agent')).toHaveCount(0);
+  await expect(page.locator('#contribute-agent')).toHaveCount(1);
+  await expect(page.locator('.project-preparation')).toHaveCount(0);
   await expect(page.locator('.backing-card')).toHaveCount(0);
 
   await page.goto('/?project=matmul-4x4x4&tab=check');

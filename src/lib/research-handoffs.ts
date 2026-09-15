@@ -1,5 +1,6 @@
 import type { PublicResearchHandoff, PublicResearchHandoffPage } from './participation';
 import { authenticatedFetch } from './account-fetch';
+import { DEFAULT_PROJECT_SLUG, accountProjectPath, publicProjectPath } from './project-slug';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -104,14 +105,15 @@ export async function readHandoffPage(
   mine: boolean,
   before: string | null,
   signal: AbortSignal,
+  slug = DEFAULT_PROJECT_SLUG,
 ): Promise<PublicResearchHandoffPage> {
   if (!(before === null || typeof before === 'string' && UUID.test(before))) throw invalidResponse();
-  const path = `${mine ? '/api/participation/research-handoffs' : '/api/public/projects/circle-packing/research-handoffs'}${before ? `?before=${encodeURIComponent(before)}` : ''}`;
+  const path = `${mine ? accountProjectPath(slug, '/research-handoffs') : publicProjectPath(slug, '/research-handoffs')}${before ? `?before=${encodeURIComponent(before)}` : ''}`;
   return parsePage(await request(path, signal, mine, false));
 }
 
-export async function readHandoff(id: string, signal: AbortSignal): Promise<PublicResearchHandoff> {
+export async function readHandoff(id: string, signal: AbortSignal, slug = DEFAULT_PROJECT_SLUG): Promise<PublicResearchHandoff> {
   if (typeof id !== 'string' || !UUID.test(id)) throw invalidResponse();
-  const path = `/api/public/projects/circle-packing/research-handoffs/${encodeURIComponent(id)}`;
+  const path = `${publicProjectPath(slug)}/research-handoffs/${encodeURIComponent(id)}`;
   return parseHandoff(await request(path, signal, false, true), id);
 }

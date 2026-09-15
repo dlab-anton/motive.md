@@ -19,7 +19,7 @@ import { createSandboxGatewayProxyRouter } from './gateway/sandbox-proxy.ts';
 import { vercelGatewayLifecycleOptions } from './vercel-lifetime.ts';
 import { createAgentRateLimitKeyGenerator } from './agent-rate-limit.ts';
 import { OpenRouterFundingService, createOpenRouterFundingRouter, parseFundingVaultKey } from './funding/index.ts';
-import { createParticipationService, createParticipationRouters } from './participation/index.ts';
+import { createAdditionalParticipation, createAgentDispatchRouter, createJoinDispatchRouter, createParticipationService, createParticipationRouters } from './participation/index.ts';
 import { createCommunityCoordinationService, CommunityCoordinationError } from './coordination/service.ts';
 import { createCommunityCoordinationRouters } from './coordination/router.ts';
 import { createResearchAdmissionAgentRouters, createResearchReviewQueueAccountRouter,
@@ -168,7 +168,7 @@ const reviewQueue = projectDatabase && researchAdmission ? createResearchReviewQ
   pool: projectDatabase, admission: researchAdmission, isActorActive: isAccountActorActive,
   tokenSecret: accountConfig.provider === 'supabase' ? accountConfig.agentTokenSecret! : localSecret!,
 }) : null;
-const participation = projectDatabase ? createParticipationService(projectDatabase, {
+const participationOptions = {
   tokenSecret: accountConfig.provider === 'supabase' ? accountConfig.agentTokenSecret! : localSecret!, issuerActorId: 'operator:seed',
   isActorActive: isAccountActorActive,
   resolveResearchDeliveryTarget,
@@ -176,15 +176,19 @@ const participation = projectDatabase ? createParticipationService(projectDataba
   ...(researchDeliveryPolicy ? { nextReadyResearchDelivery: researchDeliveryPolicy.nextReadyDelivery.bind(researchDeliveryPolicy) } : {}),
   ...(researchMemory ? { validateResearchContext: researchMemory.assertContext.bind(researchMemory),
     validateResearchReferences: researchMemory.assertReferences.bind(researchMemory) } : {}),
-}) : null;
+};
+const participation = projectDatabase ? createParticipationService(projectDatabase, participationOptions) : null;
 if (participation) await participation.ensureCircleWorkOrder();
-const participationRouters = participation ? createParticipationRouters({ service: participation,
+const participationRouterDependencies = {
   isActorActive: isAccountActorActive,
   ...(researchMemory ? { researchMemory } : {}),
   ...(researchDeliveryPolicy ? { researchDeliveryPolicy } : {}),
   ...(researchAdmission ? { researchAdmission } : {}),
   ...(findingAssessment ? { findingAssessment } : {}),
-}) : null;
+};
+const participationRouters = participation ? createParticipationRouters({ service: participation, ...participationRouterDependencies }) : null;
+// Further public projects share the credential secret and review services; each keeps its own work order and routes.
+const additionalParticipation = projectDatabase ? await createAdditionalParticipation(projectDatabase, participationOptions, participationRouterDependencies) : [];
 const circleResults = projectDatabase ? createCircleResultsService({ pool: projectDatabase, objects: createCircleArtifactObjectStore() }) : null;
 const communityCoordination = projectDatabase ? createCommunityCoordinationService({
   pool: projectDatabase, isActorActive: isAccountActorActive,
@@ -218,7 +222,7 @@ if (auth) {
   app.all('/api/auth/*splat', toNodeHandler(localAuth));
 }
 else app.all('/api/auth/*splat', (_req, res) => { res.status(404).json({ error: 'Local account authentication is not enabled.' }); });
-if (participationRouters) {
+if (participationRouters && projectDatabase) {
   const agentRateLimitKeyGenerator = createAgentRateLimitKeyGenerator();
   app.use('/api/agent', rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: 'Too many agent requests. Retry shortly.' },
@@ -227,8 +231,9 @@ if (participationRouters) {
     app.use('/api/agent/coordination', communityCoordinationRouters.agentRouter);
     app.use('/api/public/projects/circle-packing/coordination', communityCoordinationRouters.publicRouter);
   }
-  app.use('/api/agent', participationRouters.agentRouter);
+  app.use('/api/agent', createAgentDispatchRouter({ pool: projectDatabase, defaultRouter: participationRouters.agentRouter, additional: additionalParticipation }));
   app.use('/api/public/projects/circle-packing', participationRouters.publicRouter);
+  for (const item of additionalParticipation) app.use(`/api/public/projects/${item.profile.slug}`, item.routers.publicRouter);
 } else app.use(['/api/agent', '/api/public'], (_req, res) => { res.status(503).json({ error: 'The project database is not connected.' }); });
 if (circleResultRouters) app.use('/api/public/projects/circle-packing/hosted-results', circleResultRouters.publicRouter);
 if (researchDelivery) app.use('/api/public/projects/circle-packing', createResearchObservationRouter(researchDelivery));
@@ -304,7 +309,11 @@ if (connectors) app.use('/api/mcp-consent', connectors.consent);
 if (funding) app.use('/api/funding', createOpenRouterFundingRouter(funding));
 else app.use('/api/funding', (_req, res) => { res.status(503).json({ error: 'The project database is not connected.' }); });
 if (communityCoordinationRouters) app.use('/api/participation/coordination', communityCoordinationRouters.accountRouter);
-if (participationRouters) app.use('/api/participation', participationRouters.accountRouter);
+if (participationRouters) {
+  app.use('/api/participation', createJoinDispatchRouter({ additional: additionalParticipation }));
+  for (const item of additionalParticipation) app.use(`/api/participation/projects/${item.profile.slug}`, item.routers.accountRouter);
+  app.use('/api/participation', participationRouters.accountRouter);
+}
 else app.use('/api/participation', (_req, res) => { res.status(503).json({ error: 'The project database is not connected.' }); });
 if (reviewQueue) app.use('/api/participation', createResearchReviewQueueAccountRouter(reviewQueue));
 if (reviewAgentRouters) app.use('/api/participation', reviewAgentRouters.accountRouter);

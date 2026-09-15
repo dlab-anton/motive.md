@@ -330,7 +330,7 @@ function validPackage(value: unknown, submissionId: string): value is FindingRev
       'sourceIntentId', 'sourceIntentPayloadDigest', 'sourceIntentPayload'];
   if (!exact(value, rootKeys) || value.findingId !== submissionId
     || !exact(value.project, ['id', 'slug', 'revision']) || !isUuid(value.project.id)
-    || value.project.slug !== 'circle-packing' || !isPositiveInteger(value.project.revision)
+    || typeof value.project.slug !== 'string' || !/^[a-z0-9][a-z0-9-]{0,127}$/.test(value.project.slug) || !isPositiveInteger(value.project.revision)
     || !exact(value.workOrder, ['id', 'revision', 'projectRevision', 'termsDigest', 'terms'])
     || !isUuid(value.workOrder.id) || !isPositiveInteger(value.workOrder.revision)
     || !isPositiveInteger(value.workOrder.projectRevision) || !isDigest(value.workOrder.termsDigest)

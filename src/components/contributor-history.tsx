@@ -7,6 +7,7 @@ import { mergeJournalEntries } from '@/lib/research-journal';
 import { Button } from './ui/button';
 import { ContributorReviewedArtifacts } from './contributor-reviewed-artifacts';
 import { findingOutcomeLabel } from './research-finding-review';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 type Contributor = ParticipationPublicProjection['contributors'][number];
 
@@ -43,6 +44,7 @@ export function ContributorCard({ person, showIdentity = true }: { person: Contr
 }
 
 function ContributorHistory({ person, acceptedOnly = false }: { person: Contributor; acceptedOnly?: boolean }) {
+  const slug = useProjectSlug();
   const [entries, setEntries] = useState<ResearchJournalEntry[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -53,7 +55,7 @@ function ContributorHistory({ person, acceptedOnly = false }: { person: Contribu
   useEffect(() => {
     const controller = new AbortController(); pending.current = controller;
     setBusy(true); setError('');
-    void readContributorJournal(person.id, null, controller.signal, acceptedOnly).then(page => {
+    void readContributorJournal(person.id, null, controller.signal, acceptedOnly, slug).then(page => {
       if (!controller.signal.aborted) { setEntries(page.items); setCursor(page.nextCursor); setLoaded(true); }
     }).catch(caught => {
       if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : 'Contributions could not be loaded.');
@@ -67,7 +69,7 @@ function ContributorHistory({ person, acceptedOnly = false }: { person: Contribu
     if (!cursor || pending.current) return;
     const controller = new AbortController(); pending.current = controller; setBusy(true); setError('');
     try {
-      const page = await readContributorJournal(person.id, cursor, controller.signal, acceptedOnly);
+      const page = await readContributorJournal(person.id, cursor, controller.signal, acceptedOnly, slug);
       if (!controller.signal.aborted) { setEntries(current => mergeJournalEntries(current, page.items)); setCursor(page.nextCursor); }
     } catch (caught) {
       if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : 'Older contributions could not be loaded.');
@@ -79,7 +81,7 @@ function ContributorHistory({ person, acceptedOnly = false }: { person: Contribu
     {entries.length ? <ol>{entries.map(({ submission, update }) => {
       const digest = researchDigest(update);
       const finding = update.findingReview?.decision === 'ACCEPT' ? update.findingReview : null;
-      return <li key={submission.id}><a href={`/?project=circle-packing&tab=updates#research-${submission.id}`}>{digest.question}<ArrowUpRight aria-hidden="true" /></a>
+      return <li key={submission.id}><a href={`${projectLink(slug)}&tab=updates#research-${submission.id}`}>{digest.question}<ArrowUpRight aria-hidden="true" /></a>
         {finding ? <><span className="contribution-finding-source">{finding.outcome ? findingOutcomeLabel[finding.outcome] : 'Reviewed finding'}</span><p>{finding.finding}</p><p className="field-hint">{finding.limitations}</p></>
           : <><span className="contribution-finding-source">{researchSummaryLabel(digest)}</span><p>{digest.finding}</p></>}
         <div className="contribution-meta"><span>{submission.agentName}</span><time dateTime={submission.createdAt}>{new Date(submission.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</time>

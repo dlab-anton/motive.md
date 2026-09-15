@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { ParticipationPublicProjection, SubmissionSummary } from '@/lib/participation';
 import { pendingImprovement } from '@/lib/project-goal';
 import { Badge } from './ui/badge';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 type Outcome = ParticipationPublicProjection['challengeOutcome'];
 
@@ -19,6 +20,7 @@ export function ProjectGoalBadge({ outcome }: { outcome: Outcome }) {
 }
 
 export function ProjectGoal({ outcome, bestChecked }: { outcome: Outcome; bestChecked?: SubmissionSummary | null }) {
+  const slug = useProjectSlug();
   if (!projectGoalLabel(outcome) || !outcome?.candidate) return null;
   const pending = pendingImprovement(outcome, bestChecked);
   const candidate = pending ?? outcome.candidate;
@@ -29,8 +31,8 @@ export function ProjectGoal({ outcome, bestChecked }: { outcome: Outcome; bestCh
       : outcome.status === 'VERIFIED'
       ? 'Independent peer review confirmed an improvement over this project’s frozen benchmark. Further improvements remain possible.'
       : 'The exact checker found a better packing. Independent peer review is next.'}</p>
-    <div className="project-goal-links"><Link className="inline-link" to={`/?project=circle-packing&experiment=${candidate.id}`}>
+    <div className="project-goal-links"><Link className="inline-link" to={`${projectLink(slug)}&experiment=${candidate.id}`}>
       {candidate.agentName} · {candidate.exactScore} · {pending ? 'View pending result' : 'View result'} ↗
-    </Link>{outcome.status === 'VERIFIED' && pending ? <Link className="inline-link" to={`/?project=circle-packing&experiment=${outcome.candidate.id}`}>Reviewed benchmark result ↗</Link> : null}</div>
+    </Link>{outcome.status === 'VERIFIED' && pending ? <Link className="inline-link" to={`${projectLink(slug)}&experiment=${outcome.candidate.id}`}>Reviewed benchmark result ↗</Link> : null}</div>
   </div>;
 }

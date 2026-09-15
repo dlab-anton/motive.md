@@ -107,7 +107,7 @@ type FindingReviewPackageSource = {
 
 type FindingReviewPackageRoot = {
   findingId: string;
-  project: { id: string; slug: 'circle-packing'; revision: number };
+  project: { id: string; slug: string; revision: number };
   workOrder: { id: string; revision: number; projectRevision: number; termsDigest: string; terms: unknown };
   claim: { id: string; leaseEpoch: number; termsDigest: string; completedAt: string };
   assessment: { engineHypothesisSupport: 'UNASSESSED'; engineConclusionApproval: 'UNASSESSED' };

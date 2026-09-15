@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import type { ParticipationPublicProjection, PublicResearchHandoff } from '@/lib/participation';
 import { HandoffReadError, readHandoff, readHandoffPage } from '@/lib/research-handoffs';
 import { QueueNext, TaskAgent, TaskStatusIcon, TaskTime } from './task-row-parts';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const PUBLIC_HEAD_LIMIT = 6;
@@ -14,6 +15,7 @@ const merge = (first: PublicResearchHandoff[], next: PublicResearchHandoff[]) =>
 
 /** Account changes remount this hook with its containing journal. */
 export function useResearchHandoffs({ data, onlyMine }: { data: ParticipationPublicProjection | null; onlyMine: boolean }) {
+  const slug = useProjectSlug();
   const location = useLocation();
   const requested = location.hash.startsWith('#handoff-') ? location.hash.slice(9) : '';
   const requestedId = UUID.test(requested) ? requested : '';
@@ -45,7 +47,7 @@ export function useResearchHandoffs({ data, onlyMine }: { data: ParticipationPub
     if (before) setHistory(retained);
     setBusy(true); setError(''); setRetryBefore(before);
     try {
-      const page = await readHandoffPage(onlyMine, before, controller.signal);
+      const page = await readHandoffPage(onlyMine, before, controller.signal, slug);
       if (controller.signal.aborted) return false;
       setHistory(merge(retained, page.items)); setCursor(page.nextCursor); setDenied(false);
       setStale(previous => (before ? previous : false) || changes.current !== startedAtChange);
@@ -75,7 +77,7 @@ export function useResearchHandoffs({ data, onlyMine }: { data: ParticipationPub
     setFocused(null); setFocusError('');
     if (onlyMine || !requestedId || !haveProject || present) return;
     const controller = new AbortController();
-    void readHandoff(requestedId, controller.signal).then(item => {
+    void readHandoff(requestedId, controller.signal, slug).then(item => {
       if (!controller.signal.aborted) setFocused(item);
     }).catch(caught => {
       if (!controller.signal.aborted) setFocusError(caught instanceof Error ? caught.message : 'This stopped task could not be loaded.');
@@ -112,13 +114,14 @@ export function useResearchHandoffs({ data, onlyMine }: { data: ParticipationPub
 }
 
 export function HandoffRow({ item, focused, now }: { item: PublicResearchHandoff; focused: boolean; now: number }) {
+  const slug = useProjectSlug();
   return <details className="research-handoff-card task-row" id={`handoff-${item.id}`} tabIndex={-1} open={focused || undefined}>
     <summary><TaskAgent name={item.agentName} /><span className="task-main"><strong className="task-title" title={item.intent?.proposal}>{item.intent?.proposal || 'Stopped before completing the experiment'}</strong></span><TaskStatusIcon kind="stopped" /><TaskTime value={item.createdAt} now={now} /></summary>
     <div className="handoff-note task-row-detail"><p className="eyebrow">Why I stopped</p><p>{item.stopReason}</p>
       {item.intent ? <p><strong>Expected:</strong> {item.intent.expectation}</p> : null}
       <p className="field-hint">Agent-reported stop reason. This does not establish that the approach failed.</p>
       <QueueNext />
-      <a href={`/?project=circle-packing&tab=updates#handoff-${item.id}`}>Link to this handoff</a>
+      <a href={`${projectLink(slug)}&tab=updates#handoff-${item.id}`}>Link to this handoff</a>
     </div>
   </details>;
 }

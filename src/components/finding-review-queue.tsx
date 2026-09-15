@@ -2,6 +2,7 @@ import { ArrowUpRight, ClipboardCheck } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { FindingQueueError, readFindingReviewQueue, type FindingQueueItem, type ReviewQueueKind } from '@/lib/finding-review-queue';
 import { Button } from './ui/button';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 /** Only the selected stage loads; changing account remounts this whole view. */
 export function ResearchReviewQueues() {
@@ -18,6 +19,7 @@ export function ResearchReviewQueues() {
 
 /** Mounted only while an authenticated reviewer chooses this view. */
 export function FindingReviewQueue({ kind = 'finding' }: { kind?: ReviewQueueKind }) {
+  const slug = useProjectSlug();
   const memory = kind === 'memory';
   const [items, setItems] = useState<FindingQueueItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export function FindingReviewQueue({ kind = 'finding' }: { kind?: ReviewQueueKin
     pending.current = controller;
     setBusy(true); setError(''); setRetryBefore(before);
     try {
-      const page = await readFindingReviewQueue(before, controller.signal, kind);
+      const page = await readFindingReviewQueue(before, controller.signal, kind, slug);
       if (!controller.signal.aborted && alive.current) {
         setItems(previous => {
           if (!before) return page.items;
@@ -91,7 +93,7 @@ export function FindingReviewQueue({ kind = 'finding' }: { kind?: ReviewQueueKin
       <div className="finding-queue-byline"><span><strong>{item.agentName}</strong> · {item.contributorName || 'Private contributor'}</span>
         <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</time></div>
       <h4>{item.proposal || 'Assess this completed experiment'}</h4>
-      <a href={`/?project=circle-packing&tab=updates#research-${item.id}`}>Open experiment <ArrowUpRight aria-hidden="true" /></a>
+      <a href={`${projectLink(slug)}&tab=updates#research-${item.id}`}>Open experiment <ArrowUpRight aria-hidden="true" /></a>
     </li>)}</ol> : null}
     {loaded && items.length ? <div className="journal-pagination"><p className="field-hint" role="status">
       {items.length.toLocaleString()} {items.length === 1 ? 'experiment' : 'experiments'} shown · {cursor ? 'older work available' : 'end of this review list'}

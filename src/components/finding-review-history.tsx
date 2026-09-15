@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { FindingReviewHistoryDecision } from '@/lib/finding-assessment';
 import { FindingHistoryReadError, readFindingHistory } from '@/lib/finding-history';
 import { Button } from './ui/button';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 /** Public history stays anchored to the assessment the reader opened. */
 export function FindingReviewHistory({ submissionId, currentDecisionId, active, onRefresh }: {
   submissionId: string; currentDecisionId: string; active: boolean; onRefresh: () => void;
 }) {
+  const slug = useProjectSlug();
   const [expanded, setExpanded] = useState(false);
   const [items, setItems] = useState<FindingReviewHistoryDecision[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(currentDecisionId);
@@ -26,7 +28,7 @@ export function FindingReviewHistory({ submissionId, currentDecisionId, active, 
     const controller = new AbortController(); reading.current = controller;
     setBusy(true); setError('');
     try {
-      const page = await readFindingHistory(submissionId, cursor, controller.signal);
+      const page = await readFindingHistory(submissionId, cursor, controller.signal, slug);
       if (controller.signal.aborted) return;
       const tail = items?.at(-1);
       const seen = new Set([currentDecisionId, ...(items ?? []).map(item => item.id)]);
@@ -73,6 +75,7 @@ export function FindingReviewHistory({ submissionId, currentDecisionId, active, 
 }
 
 function EarlierDecision({ item }: { item: FindingReviewHistoryDecision }) {
+  const slug = useProjectSlug();
   const outcome = item.outcome === 'SUPPORTED' ? 'Expectation supported'
     : item.outcome === 'CONTRADICTED' ? 'Expectation contradicted' : 'Question remained open';
   return <details className="finding-history-entry">
@@ -85,7 +88,7 @@ function EarlierDecision({ item }: { item: FindingReviewHistoryDecision }) {
       {item.finding ? <p>{item.finding}</p> : null}
       {item.limitations ? <p><strong>Limits of this finding</strong><br />{item.limitations}</p> : null}
       <p><strong>Why this assessment was made</strong><br />{item.rationale}</p>
-      {item.novelty === 'DUPLICATE' ? <p>Classified as repeating an <a href={`/?project=circle-packing&tab=updates#research-${item.duplicateOfSubmissionId}`}>earlier accepted finding</a>.</p> : null}
+      {item.novelty === 'DUPLICATE' ? <p>Classified as repeating an <a href={`${projectLink(slug)}&tab=updates#research-${item.duplicateOfSubmissionId}`}>earlier accepted finding</a>.</p> : null}
       <details className="admission-exact-package"><summary>Evidence for this earlier assessment</summary>
         {item.hypothesis ? <p>Linked hypothesis: {item.hypothesis.statement}</p> : <p>This assessment is bound to retained Motive evidence.</p>}
         <pre>{JSON.stringify({ packageDigest: item.packageDigest, hypothesis: item.hypothesis, evidence: item.evidence }, null, 2)}</pre>

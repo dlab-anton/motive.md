@@ -71,7 +71,7 @@ export class FindingAssessmentService{
     if(!UUID.test(submissionId))return null;
     const result=await client.query(`SELECT project.id::text AS project_id,project.slug
       FROM motive.projects project JOIN motive.submissions submission ON submission.project_id=project.id
-      WHERE submission.id=$1 AND project.slug='circle-packing' AND project.visibility='PUBLIC'`,[submissionId]);
+      WHERE submission.id=$1 AND project.visibility='PUBLIC'`,[submissionId]);
     return result.rowCount===1?result.rows[0]:null;
   }
 
@@ -233,7 +233,7 @@ export class FindingAssessmentService{
       JOIN motive.hypothesis_submission_delivery_results draft_result ON draft_result.delivery_id=draft.delivery_id AND draft_result.operation=draft.operation
       JOIN motive.hypothesis_submission_delivery_operations evidence ON evidence.delivery_id=delivery.id AND evidence.operation='NEUTRAL_EVIDENCE'
       JOIN motive.hypothesis_submission_delivery_results evidence_result ON evidence_result.delivery_id=evidence.delivery_id AND evidence_result.operation=evidence.operation
-      WHERE project.slug='circle-packing' AND project.visibility='PUBLIC' AND submission.origin='EXTERNAL'`,[submissionId]);
+      WHERE project.visibility='PUBLIC' AND submission.origin='EXTERNAL'`,[submissionId]);
     if(result.rowCount!==1)fail('NOT_FOUND','A completed investigation with retained engine observations was not found.');
     const row=result.rows[0],provenance=nested(row.provenance,'submission provenance');
     const envelope=nested(provenance.investigation,'investigation provenance'),investigation=nested(envelope.investigation,'investigation') as SubmissionInvestigationInput;
@@ -272,14 +272,14 @@ export class FindingAssessmentService{
       [investigation.researchReferences,row.intent_research_references as SubmissionResearchReference[]|null],
       [investigation.motiveReferences,row.intent_motive_references as SubmissionMotiveReference[]|null]);
     const engine=this.validateStoredEngine(row);
-    if(!same(engine.draftBody,buildDraftBody(delivery,sourceMaterial,'circle-packing'))
-      ||!same(engine.evidenceBody,buildNeutralEvidenceBody(delivery,sourceMaterial,'circle-packing')))
+    if(!same(engine.draftBody,buildDraftBody(delivery,sourceMaterial,text(row,'slug')))
+      ||!same(engine.evidenceBody,buildNeutralEvidenceBody(delivery,sourceMaterial,text(row,'slug'))))
       fail('CONFLICT','Retained engine operations differ from the immutable local source.');
     const references=declaredReferences(investigation,row);
     const reproducibility=row.repro_request_digest===null?null:{requestDigest:text(row,'repro_request_digest'),
       solverSourceDigest:text(row,'solver_source_digest'),trialResultsDigest:text(row,'trial_results_digest')};
     const pkg:FindingReviewPackage={format:'motive.finding-review-package/0.1',findingId:submissionId,
-      project:{id:text(row,'project_id'),slug:'circle-packing',revision:Number(row.project_revision)},
+      project:{id:text(row,'project_id'),slug:text(row,'slug'),revision:Number(row.project_revision)},
       workOrder:{id:text(row,'work_order_id'),revision:Number(row.work_order_revision),projectRevision:Number(row.project_revision),
         termsDigest:text(row,'work_terms_digest'),terms:row.terms},claim:{id:text(row,'claim_id'),leaseEpoch:Number(row.lease_epoch),
         termsDigest:text(row,'claim_terms_digest'),completedAt:dateText(row.completed_at)},
@@ -350,7 +350,7 @@ export class FindingAssessmentService{
         AND claim_intent.lease_epoch=claim.lease_epoch AND claim_intent.agent_token_id=artifact.agent_token_id
       LEFT JOIN motive.participation_claim_research_targets claim_target ON claim_target.claim_id=claim_intent.claim_id
         AND claim_target.project_id=claim_intent.project_id
-      WHERE project.slug='circle-packing' AND project.visibility='PUBLIC' AND submission.origin='EXTERNAL'`,[submissionId]);
+      WHERE project.visibility='PUBLIC' AND submission.origin='EXTERNAL'`,[submissionId]);
     if(result.rowCount!==1)fail('NOT_FOUND','A completed Motive investigation was not found.');
     const row=result.rows[0],provenance=nested(row.provenance,'submission provenance');
     const envelope=nested(provenance.investigation,'investigation provenance'),investigation=nested(envelope.investigation,'investigation') as SubmissionInvestigationInput;
@@ -383,7 +383,7 @@ export class FindingAssessmentService{
           ...(row.post_public_question===null?{}:{publicSummary:{question:text(row,'post_public_question'),finding:text(row,'post_public_finding')} }),
           createdAt:dateText(row.post_created_at)},reproducibility};
     const root={findingId:submissionId,
-      project:{id:text(row,'project_id'),slug:'circle-packing' as const,revision:Number(row.project_revision)},
+      project:{id:text(row,'project_id'),slug:text(row,'slug'),revision:Number(row.project_revision)},
       workOrder:{id:text(row,'work_order_id'),revision:Number(row.work_order_revision),projectRevision:Number(row.project_revision),
         termsDigest:text(row,'work_terms_digest'),terms:row.terms},claim:{id:text(row,'claim_id'),leaseEpoch:Number(row.lease_epoch),
         termsDigest:text(row,'claim_terms_digest'),completedAt:dateText(row.completed_at)},
@@ -666,15 +666,15 @@ export class FindingAssessmentService{
   }
 
   async publicReview(projectSlug:string,submissionId:string):Promise<FindingReviewPublicProjection>{
-    if(projectSlug!=='circle-packing'||!UUID.test(submissionId))fail('NOT_FOUND','Submission was not found.');
-    const project=await this.projectFor(submissionId);if(!project)fail('NOT_FOUND','Submission was not found.');
+    if(!UUID.test(submissionId))fail('NOT_FOUND','Submission was not found.');
+    const project=await this.projectFor(submissionId);if(!project||project.slug!==projectSlug)fail('NOT_FOUND','Submission was not found.');
     const readiness=await this.readiness(submissionId);const latest=await this.tail(submissionId);
     return{format:'motive.finding-review.public/0.1',submissionId,available:readiness===null,
       reason:readiness,latestDecision:latest?this.publicDecision(latest):null};
   }
 
   async publicHistory(projectSlug:string,submissionId:string,before?:string):Promise<FindingReviewHistoryPage>{
-    if(projectSlug!=='circle-packing'||!UUID.test(submissionId)||before!==undefined&&!UUID.test(before))
+    if(!UUID.test(submissionId)||before!==undefined&&!UUID.test(before))
       fail('NOT_FOUND','Finding review history was not found.');
     const result=await this.options.pool.query(`WITH RECURSIVE subject AS (
         SELECT submission.id AS submission_id,submission.project_id

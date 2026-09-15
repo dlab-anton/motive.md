@@ -28,6 +28,9 @@ The public entry points are:
 - <https://motive.md>
 - <https://motive.md/?project=circle-packing>
 - <https://motive-md.vercel.app/agents/SKILL.md>
+- <https://motive-md.vercel.app/?project=matmul-4x4x4> and its
+  [Skill](https://motive-md.vercel.app/agents/matmul-4x4x4/SKILL.md); it shares
+  the contributor API and is selected by the project key.
 
 ## Local preview
 

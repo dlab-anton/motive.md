@@ -16,6 +16,7 @@ import { ResearchTaskRecord } from './research-task-record';
 import { QueueNext, TaskAgent, TaskStatusIcon, TaskTime, useMinuteClock } from './task-row-parts';
 import { completedChronologicalPrefix, mergeChronologicalTasks } from '@/lib/task-list';
 import { pendingImprovement } from '@/lib/project-goal';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 export function FollowProject({ project, controls }: { project: Project; controls: SupportControls }) {
   const following = controls.state.following.includes(project.id);
@@ -47,8 +48,9 @@ export function ProjectUpdates({ data, me, accountId = null }: { data: Participa
 }
 
 function ExperimentRow({ entry, now }: { entry: ResearchJournalEntry; now: number }) {
+  const slug = useProjectSlug();
   const digest = researchDigest(entry.update);
-  return <a className="experiment-row task-row task-row-link" href={`/?project=circle-packing&experiment=${entry.submission.id}`}>
+  return <a className="experiment-row task-row task-row-link" href={`${projectLink(slug)}&experiment=${entry.submission.id}`}>
     <TaskAgent name={entry.update.agentName} /><span className="task-main"><strong className="task-title" title={digest.question}>{digest.question}</strong></span>
     <TaskStatusIcon kind={entry.update.completed && entry.update.assessmentTiming === 'AFTER_CHECK' ? 'complete' : 'needs-update'} /><TaskTime value={entry.submission.createdAt} now={now} />
   </a>;
@@ -60,6 +62,7 @@ type TimelineItem = { id: string; createdAt: string } & (
 );
 
 function JournalEntries({ data, me, onlyMine, accountId }: { data: ParticipationPublicProjection | null; me: ParticipationMeResponse | null; onlyMine: boolean; accountId: string | null }) {
+  const slug = useProjectSlug();
   const location = useLocation();
   const now = useMinuteClock();
   const challenge = !onlyMine ? data?.challengeOutcome : null;
@@ -67,7 +70,7 @@ function JournalEntries({ data, me, onlyMine, accountId }: { data: Participation
   const pinned = pendingCandidate ?? (challenge && challenge.status !== 'OPEN' ? challenge.candidate : null);
   const pinnedVerified = !pendingCandidate && challenge?.status === 'VERIFIED';
   const lastScrolled = useRef('');
-  const ownPage = useProjectResource<ResearchJournalPage>(onlyMine ? '/api/participation/research-updates' : null);
+  const ownPage = useProjectResource<ResearchJournalPage>(onlyMine ? accountProjectPath(slug, '/research-updates') : null);
   const [history, setHistory] = useState<ResearchJournalEntry[] | null>(null);
   const [visibleLimit, setVisibleLimit] = useState(10);
   // undefined means the first page still owns the continuation cursor.
@@ -88,7 +91,7 @@ function JournalEntries({ data, me, onlyMine, accountId }: { data: Participation
   const entries = history ?? latest;
   const newerAvailable = Boolean(history && latest.some(item => !history.some(older => older.submission.id === item.submission.id))) || handoffs.stale;
   const requestedId = location.hash.startsWith('#research-') ? location.hash.slice('#research-'.length) : '';
-  const focused = useJournalEntry(!onlyMine && journalIdPattern.test(requestedId) && data && !entries.some(item => item.submission.id === requestedId) ? requestedId : null);
+  const focused = useJournalEntry(!onlyMine && journalIdPattern.test(requestedId) && data && !entries.some(item => item.submission.id === requestedId) ? requestedId : null, slug);
   const ownership = useSubmissionOwnership(onlyMine ? null : accountId,
     [...entries.map(item => item.submission.id), ...(focused.entry ? [focused.entry.submission.id] : [])]);
   const continuation = cursor !== undefined ? cursor : onlyMine ? ownPage.data?.nextCursor ?? null
@@ -131,7 +134,7 @@ function JournalEntries({ data, me, onlyMine, accountId }: { data: Participation
     const retained = entries;
     setHistory(retained); setCursor(continuation);
     try {
-      const page = await readJournalPage(onlyMine, continuation, controller.signal);
+      const page = await readJournalPage(onlyMine, continuation, controller.signal, slug);
       if (!controller.signal.aborted) { setHistory(mergeJournalEntries(retained, page.items)); setCursor(page.nextCursor); return true; }
     } catch (error) {
       if (!controller.signal.aborted) setError(error instanceof Error ? error.message : 'Older experiments could not be loaded.');
@@ -165,7 +168,7 @@ function JournalEntries({ data, me, onlyMine, accountId }: { data: Participation
   return <>
     {focused.loading ? <p role="status">Loading the linked experiment…</p> : null}
     {focused.error ? <div className="journal-load-error" role="alert"><p>{focused.error}</p><Button size="sm" variant="outline" onClick={focused.reload}>Retry experiment</Button></div> : null}
-    {focused.entry ? <p><a className="inline-link" href={`/?project=circle-packing&experiment=${focused.entry.submission.id}`}>Open the linked earlier experiment ↗</a></p> : null}
+    {focused.entry ? <p><a className="inline-link" href={`${projectLink(slug)}&experiment=${focused.entry.submission.id}`}>Open the linked earlier experiment ↗</a></p> : null}
     {handoffs.focusError ? <div className="journal-load-error" role="alert"><p>{handoffs.focusError}</p><Button variant="outline" size="sm" onClick={handoffs.retryFocus}>Retry linked task</Button></div> : null}
     {handoffs.error ? <div className="journal-load-error" role="alert"><p>{handoffs.error}</p>{!handoffs.denied ? <Button variant="outline" size="sm" disabled={handoffs.busy} onClick={() => void handoffs.retry()}>Retry tasks</Button> : null}</div> : null}
     {ownPage.error ? <div className="journal-load-error" role="alert"><p>Your agents’ research could not be refreshed.{ownPage.data ? ' The last loaded page is shown.' : ''}</p><Button size="sm" variant="outline" onClick={ownPage.reload}>Retry my research</Button></div> : null}
@@ -175,9 +178,9 @@ function JournalEntries({ data, me, onlyMine, accountId }: { data: Participation
     <div className="task-column-head" aria-hidden="true"><span>Agent</span><span>Task</span><span><span className="sr-only">Status</span></span><span>When</span></div>
     {claimSummary ? <p className="task-idle">{claimSummary}</p> : null}
     <div className="research-stories" id={active.length ? 'active-research' : undefined} aria-label="Project tasks">
-      {pinned ? <a className="experiment-row task-row task-row-link task-priority" href={`/?project=circle-packing&experiment=${pinned.id}`}>
+      {pinned ? <a className="experiment-row task-row task-row-link task-priority" href={`${projectLink(slug)}&experiment=${pinned.id}`}>
         <TaskAgent name={pinned.agentName} />
-        <span className="task-main"><strong className="task-title">{pinnedVerified ? 'Goal met · Independently reviewed improvement' : 'Priority review · Better packing found'}</strong><span className="task-note">{pinned.exactScore} · Above the frozen benchmark</span></span>
+        <span className="task-main"><strong className="task-title">{pinnedVerified ? 'Goal met · Independently reviewed improvement' : projectWords(slug).goalMet}</strong><span className="task-note">{pinned.exactScore} · Above the frozen benchmark</span></span>
         <span className="task-status task-status-icon" role="img" aria-label={pinnedVerified ? 'Goal met' : 'Awaiting independent review'} title={pinnedVerified ? 'Goal met' : 'Awaiting independent review'}>{pinnedVerified ? <CheckCircle2 aria-hidden="true" /> : <ScanSearch aria-hidden="true" />}</span>
         <TaskTime value={pinned.createdAt} now={now} />
       </a> : null}

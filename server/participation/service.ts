@@ -2,14 +2,12 @@ import { createHash, createHmac, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { LedgerKernel } from '../../packages/accounting/src/kernel.ts';
 import { digestCanonicalJson, type WorkOrderTerms } from '../../packages/domain/src/contracts.ts';
-import { checkCirclePackingWitness, CSQV_MAX_BYTES } from '../../src/lib/circle-packing.ts';
-import { compareCirclePackingWitnesses } from '../../src/lib/circle-packing-equivalence.ts';
+import { CIRCLE_PACKING_PARTICIPATION_PROFILE, type ParticipationProjectProfile } from './profile.ts';
 import type { GeometryComparisonResponse } from '../../src/lib/geometry-comparison.ts';
 import { validatePublicResearchSummary } from '../../src/lib/research-summary.ts';
 import { ExperimentProtocolValidationError, experimentProtocolFingerprintPreimage, validateExperimentProtocol,
   type ExperimentProtocol } from '../../src/lib/experiment-protocol.ts';
 import {
-  PARTICIPATION_PROJECT_SLUG,
   type AcceptanceStatus,
   type AgentAssignmentResponse,
   type AgentSessionProjection,
@@ -58,16 +56,6 @@ import type { AgentResearchDeliveryCheckpoint, RecoveredFindingCheckpoint } from
 import type { ProjectReviewerChange, ProjectReviewers } from '../../src/lib/project-reviewers.ts';
 import type { ContributorReviewedArtifactsPage } from '../../src/lib/reviewed-artifacts.ts';
 
-const WORK_ORDER_KEY = 'circle-packing-external';
-const WORK_ORDER_REVISION = 1;
-const AGREEMENT_ID = 'circle-packing-external-v1';
-const REFERENCE_COMMIT = '80f08aa72d9d85d7d9d2a871825b46bdec471bb2';
-const REFERENCE_SCORE = '5.29109518547430697';
-const REFERENCE_WITNESS_DIGEST = 'sha256:4ac26276b59f1978b86d100df831863a23df1d7756baba3ad542d3004afb575e';
-const CHECKER_FORMAT = 'motive.csqv.local-check.v1';
-const CHECKER_VERSION = 1;
-const CHECKER_SOURCE_DIGEST = 'sha256:a2f9904fe0359edda76b41b6c840b2ff219288c9cb8671d85376c1b1c0693559';
-const LICENSE_REF = 'circle-packing-reference-terms-v1';
 const TOKEN_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 const AGENT_CONTACT_FRESHNESS_MS = 2 * 60 * 1000;
 const THIRTY_MINUTE_SESSION_MS = 30 * 60 * 1000;
@@ -177,7 +165,7 @@ export class ParticipationError extends Error {
   }
 }
 
-type ServiceOptions = { tokenSecret: string; issuerActorId: string; now?: () => Date;
+type ServiceOptions = { tokenSecret: string; issuerActorId: string; now?: () => Date; profile?: ParticipationProjectProfile;
   isActorActive?: (actorId: string) => boolean | Promise<boolean>;
   validateResearchContext?: (projectId: string, context: SubmissionResearchContext, client: PoolClient) => Promise<void>;
   validateResearchReferences?: (projectId: string, references: SubmissionResearchReference[], client: PoolClient) => Promise<void>;
@@ -500,12 +488,18 @@ export function validateSubmissionReproducibility(value: SubmissionReproducibili
 
 export class ParticipationService {
   private readonly ledger: LedgerKernel;
+  readonly profile: ParticipationProjectProfile;
   private readonly now: () => Date;
   constructor(private readonly pool: Pool, private readonly options: ServiceOptions) {
     if (Buffer.byteLength(options.tokenSecret, 'utf8') < 32) throw new Error('Participation token secret must be at least 32 UTF-8 bytes.');
     if (!/^operator:[A-Za-z0-9._~-]{1,480}$/.test(options.issuerActorId)) throw new Error('Participation issuerActorId is invalid.');
-    this.ledger = new LedgerKernel(pool); this.now = options.now ?? (() => new Date());
+    this.ledger = new LedgerKernel(pool); this.profile = options.profile ?? CIRCLE_PACKING_PARTICIPATION_PROFILE; this.now = options.now ?? (() => new Date());
   }
+
+  /** SQL fragments that follow the profile's objective direction. */
+  private get scoreOrder(): 'ASC' | 'DESC' { return this.profile.objectiveDirection === 'MINIMIZE' ? 'ASC' : 'DESC'; }
+  private get betterThan(): '<' | '>' { return this.profile.objectiveDirection === 'MINIMIZE' ? '<' : '>'; }
+  private get bestAggregate(): 'min' | 'max' { return this.profile.objectiveDirection === 'MINIMIZE' ? 'min' : 'max'; }
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
@@ -529,7 +523,7 @@ export class ParticipationService {
 
   private async reviewerProjectId(client: Pick<Pool, 'query'> | PoolClient): Promise<string> {
     const project = await client.query(`SELECT id FROM motive.projects WHERE slug=$1 AND visibility='PUBLIC'`,
-      [PARTICIPATION_PROJECT_SLUG]);
+      [this.profile.slug]);
     if (project.rowCount !== 1) throw new ParticipationError('NOT_FOUND', 'Reviewer management is unavailable.');
     return text(project.rows[0], 'id');
   }
@@ -601,7 +595,7 @@ export class ParticipationService {
   }
 
   private credential(row: QueryResultRow): AgentTokenProjection {
-    return { id: text(row, 'id'), projectSlug: PARTICIPATION_PROJECT_SLUG, agentName: text(row, 'agent_name'),
+    return { id: text(row, 'id'), projectSlug: this.profile.slug, agentName: text(row, 'agent_name'),
       modelName: nullableText(row, 'model_name'), publicDisplayName: nullableText(row, 'public_display_name'),
       expiresAt: dateText(row.expires_at), revokedAt: row.revoked_at ? dateText(row.revoked_at) : null,
       lastSeenAt: row.last_used_at ? dateText(row.last_used_at) : null, createdAt: dateText(row.created_at) };
@@ -646,39 +640,39 @@ export class ParticipationService {
     return tokens.map(token => this.agentSession(token, byCredential.get(text(token, 'id'))));
   }
 
-  async ensureCircleWorkOrder(): Promise<{ id: string; termsDigest: string; projectRevision: number }> {
+  /** Historical name kept for callers and tests; the profile decides which project it serves. */
+  ensureCircleWorkOrder(): Promise<{ id: string; termsDigest: string; projectRevision: number }> { return this.ensureWorkOrder(); }
+
+  async ensureWorkOrder(): Promise<{ id: string; termsDigest: string; projectRevision: number }> {
     const project = await this.pool.query(`SELECT id,current_revision,created_by FROM motive.projects
-      WHERE slug=$1 AND visibility='PUBLIC'`, [PARTICIPATION_PROJECT_SLUG]);
-    if (project.rowCount !== 1) throw new ParticipationError('NOT_FOUND', 'The public circle-packing project is unavailable.');
+      WHERE slug=$1 AND visibility='PUBLIC'`, [this.profile.slug]);
+    if (project.rowCount !== 1) throw new ParticipationError('NOT_FOUND', this.profile.unavailableMessage);
     const row = project.rows[0]; const projectId = text(row, 'id'); const revision = Number(row.current_revision);
     if (text(row, 'created_by') !== this.options.issuerActorId) throw new ParticipationError('FORBIDDEN', 'The configured issuer does not own the curated project.');
     await this.pool.query(`INSERT INTO motive.memberships (id,project_id,actor_id,role,scopes,granted_by)
       VALUES ($1,$2,$3,'OWNER',ARRAY['project:admin','work-order:create'],$3)
       ON CONFLICT (project_id,actor_id) DO NOTHING`, [randomUUID(), projectId, this.options.issuerActorId]);
-    const evaluationProfile = digestCanonicalJson({ format: CHECKER_FORMAT, version: CHECKER_VERSION,
-      sourceDigest: CHECKER_SOURCE_DIGEST, n: 101,
-      witnessFormat: 'motive.csqv.witness.v1', maximumBytes: 32768, maximumDecimalPlaces: 18,
-      referenceWitnessDigest: REFERENCE_WITNESS_DIGEST });
+    const evaluationProfile = digestCanonicalJson(this.profile.evaluationProfile);
     const terms: WorkOrderTerms = {
       format: 'motive.work-order/0.1', project_id: projectId, project_revision: revision,
-      agreement_id: AGREEMENT_ID, objective: `Run one bounded N=101 witness test, retain its exact checker outcome, and compare its radius sum with ${REFERENCE_SCORE}.`,
-      input_commit: REFERENCE_COMMIT, allowed_effects: ['submit-data-only-circle-witness'],
+      agreement_id: this.profile.agreementId, objective: this.profile.workOrderObjective,
+      input_commit: this.profile.referenceCommit, allowed_effects: [...this.profile.allowedEffects],
       hosted: { enabled: false, inference: { currency: 'USD', ceiling: '0', profile_digest: evaluationProfile }, maximum_runtime_seconds: 1 },
       external: { enabled: true, claim_required: true, max_active_claims: MAX_ACTIVE_CLAIMS, max_lease_seconds: CLAIM_LIFETIME_MS / 1000,
-        late_submission_policy: 'reject', review_admission: 'manual', artifact: { formats: ['motive.csqv.witness.v1'], max_bytes: 32768, license_acceptance_required: true } },
+        late_submission_policy: 'reject', review_admission: 'manual', artifact: { formats: [this.profile.witnessFormat], max_bytes: this.profile.maximumWitnessBytes, license_acceptance_required: true } },
       evaluation: { profile_digest: evaluationProfile, human_acceptance_required: true },
       public_novelty_claim: 'A valid submission is a candidate only; an independent owner or steward decides acceptance.',
     };
     const work = await this.ledger.createWorkOrder({ actorId: this.options.issuerActorId,
-      idempotencyKey: `${AGREEMENT_ID}-work-order`, projectId, workOrderKey: WORK_ORDER_KEY,
-      revision: WORK_ORDER_REVISION, terms, state: 'READY' });
+      idempotencyKey: `${this.profile.agreementId}-work-order`, projectId, workOrderKey: this.profile.workOrderKey,
+      revision: this.profile.workOrderRevision, terms, state: 'READY' });
     return { id: work.id, termsDigest: work.termsDigest, projectRevision: revision };
   }
 
   private async workOrder(client: PoolClient): Promise<QueryResultRow> {
     const result = await client.query(`SELECT w.*,s.state,p.slug,p.visibility FROM motive.work_orders w
       JOIN motive.work_order_states s ON s.work_order_id=w.id JOIN motive.projects p ON p.id=w.project_id
-      WHERE p.slug=$1 AND w.work_order_key=$2 AND w.revision=$3`, [PARTICIPATION_PROJECT_SLUG, WORK_ORDER_KEY, WORK_ORDER_REVISION]);
+      WHERE p.slug=$1 AND w.work_order_key=$2 AND w.revision=$3`, [this.profile.slug, this.profile.workOrderKey, this.profile.workOrderRevision]);
     if (result.rowCount !== 1 || result.rows[0].state !== 'READY' || result.rows[0].visibility !== 'PUBLIC') {
       throw new ParticipationError('NOT_FOUND', 'External contribution assignment is not available.');
     }
@@ -703,7 +697,7 @@ export class ParticipationService {
       ORDER BY claim.lease_epoch DESC,claim.created_at DESC,claim.id DESC LIMIT 1`, [workOrder.id, actorId]);
     const terms = workOrder.terms as WorkOrderTerms;
     if (!claims.rowCount) return { id: text(workOrder, 'id'), credentialId: text(token, 'id'), claimId: null,
-      projectSlug: PARTICIPATION_PROJECT_SLUG,
+      projectSlug: this.profile.slug,
       projectRevision: Number(workOrder.project_revision), workOrderId: text(workOrder, 'id'), workOrderRevision: Number(workOrder.revision),
       agreementId: terms.agreement_id, termsDigest: text(workOrder, 'terms_digest'), status: 'AVAILABLE', leaseEpoch: null,
       expiresAt: null, createdAt: dateText(workOrder.created_at), completedAt: null, intent: null };
@@ -712,7 +706,7 @@ export class ParticipationService {
     if (completedAt) status = 'COMPLETED';
     else if (status === 'ACTIVE' && new Date(claim.expires_at).getTime() <= this.now().getTime()) status = 'EXPIRED';
     return { id: text(workOrder, 'id'), credentialId: text(token, 'id'), claimId: text(claim, 'id'),
-      projectSlug: PARTICIPATION_PROJECT_SLUG,
+      projectSlug: this.profile.slug,
       projectRevision: Number(workOrder.project_revision), workOrderId: text(workOrder, 'id'), workOrderRevision: Number(workOrder.revision),
       agreementId: terms.agreement_id, termsDigest: text(workOrder, 'terms_digest'), status, leaseEpoch: Number(claim.lease_epoch),
       expiresAt: dateText(claim.expires_at), createdAt: dateText(claim.created_at), completedAt,
@@ -738,7 +732,7 @@ export class ParticipationService {
   async join(ownerActorId: string, accountName: string, input: JoinParticipationInput, idempotencyKey: string): Promise<JoinParticipationResponse> {
     if (!/^account:[A-Za-z0-9._~-]{1,480}$/.test(ownerActorId)) throw new ParticipationError('UNAUTHORIZED', 'A live account is required.');
     if (JSON.stringify(Object.keys(input).sort()) !== JSON.stringify(['acceptReferenceTerms', 'projectSlug', 'publishDisplayName'])
-      || input.projectSlug !== PARTICIPATION_PROJECT_SLUG || typeof input.publishDisplayName !== 'boolean'
+      || input.projectSlug !== this.profile.slug || typeof input.publishDisplayName !== 'boolean'
       || input.acceptReferenceTerms !== true) throw new ParticipationError('VALIDATION', 'Join request is invalid.');
     await this.ensureCircleWorkOrder();
     const result = await this.transaction(async client => {
@@ -756,7 +750,7 @@ export class ParticipationService {
           (id,project_id,owner_actor_id,agent_name,model_name,public_display_name,token_digest,token_hint,license_acceptance_ref,expires_at,created_at)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`, [tokenId, work.project_id, ownerActorId,
           connectionName(tokenId), null, input.publishDisplayName ? accountName : null, digest,
-          digest.slice(-12), LICENSE_REF, expires, created]);
+          digest.slice(-12), this.profile.licenseRef, expires, created]);
         const credential = this.credential(inserted.rows[0]); const assignment = await this.assignment(client, inserted.rows[0], work);
         await this.event(client, text(work, 'project_id'), 'participation_agent', tokenId, 'external.contributor_joined', ownerActorId,
           { contributor_id: tokenId, contributor_display_name: credential.publicDisplayName });
@@ -777,7 +771,7 @@ export class ParticipationService {
       JOIN motive.projects project ON project.id=token.project_id
       WHERE token.id=$1 AND token.owner_actor_id=$2 AND project.slug=$3
         AND token.revoked_at IS NULL AND token.expires_at>$4 AND membership.revoked_at IS NULL`,
-    [tokenId, ownerActorId, PARTICIPATION_PROJECT_SLUG, this.now()]);
+    [tokenId, ownerActorId, this.profile.slug, this.now()]);
     if (result.rowCount !== 1) throw unauthorized();
     const row = result.rows[0];
     const projectKey = this.tokenValue(tokenId, ownerActorId);
@@ -850,7 +844,7 @@ export class ParticipationService {
     const result = await this.pool.query(`SELECT token.* FROM motive.participation_agent_tokens token
       JOIN motive.projects project ON project.id=token.project_id
       WHERE token.id=$1 AND token.owner_actor_id=$2 AND project.slug=$3`,
-    [tokenId, ownerActorId, PARTICIPATION_PROJECT_SLUG]);
+    [tokenId, ownerActorId, this.profile.slug]);
     if (result.rowCount !== 1) throw new ParticipationError('NOT_FOUND', 'Agent credential not found.');
     const token = result.rows[0];
     return this.agentWorkQueue({ tokenId, actorId: agentActor(tokenId), ownerActorId,
@@ -889,7 +883,7 @@ export class ParticipationService {
         AND (NOT $3::boolean
           OR NOT EXISTS(SELECT 1 FROM durable_verified_improvements verified
             WHERE verified.project_id=submission.project_id)
-          OR artifact.exact_score::numeric>(SELECT max(verified.exact_score::numeric)
+          OR artifact.exact_score::numeric${this.betterThan}(SELECT ${this.bestAggregate}(verified.exact_score::numeric)
             FROM durable_verified_improvements verified WHERE verified.project_id=submission.project_id))
         AND NOT EXISTS (
           SELECT 1 FROM motive.participation_claim_intents cited_intent
@@ -898,7 +892,7 @@ export class ParticipationService {
           WHERE cited_intent.project_id=$1 AND cited_token.owner_actor_id=$2
             AND motive.valid_agent_finding_review_proof($2,cited_token.id,
               cited_completion.submission_id,submission.id,$1))
-      ORDER BY CASE WHEN $3::boolean THEN artifact.exact_score::numeric END DESC NULLS LAST,
+      ORDER BY CASE WHEN $3::boolean THEN artifact.exact_score::numeric END ${this.scoreOrder} NULLS LAST,
         submission.created_at ASC,submission.id ASC LIMIT 1`,
     [context.projectId,context.ownerActorId,benchmarkImprovementOnly]);
     if(!candidates.rowCount)return null;const row=candidates.rows[0];
@@ -1267,7 +1261,7 @@ export class ParticipationService {
 
   async submitWitness(context: ParticipationAgentContext, assignmentId: string, input: SubmitCircleWitnessInput, idempotencyKey: string): Promise<SubmissionSummary> {
     const bytes = Buffer.from(input.witness, 'utf8');
-    if (bytes.length < 1 || bytes.length > 32768) throw new ParticipationError('VALIDATION', 'Witness must be 1â€“32768 UTF-8 bytes.');
+    if (bytes.length < 1 || bytes.length > this.profile.maximumWitnessBytes) throw new ParticipationError('VALIDATION', `Witness must be 1–${this.profile.maximumWitnessBytes} UTF-8 bytes.`);
     const investigation = validateInvestigation(input.investigation);
     return this.transaction(async client => {
       const token = await this.tokenForUpdate(client, context); const work = await this.workOrder(client);
@@ -1317,39 +1311,39 @@ export class ParticipationService {
             try { await this.options.validateResearchReferences(context.projectId, investigation.researchReferences, client); }
             catch { throw new ParticipationError('VALIDATION', 'Research references must match retained snapshots for this project.'); }
           }
-          const checked = checkCirclePackingWitness(input.witness);
+          const checked = this.profile.check(input.witness);
           const witnessDigest = sha256(bytes);
-          const manifestDigest = digestCanonicalJson({ format: 'motive.external-circle-artifact/0.1', witness_digest: witnessDigest, bytes: bytes.length });
+          const manifestDigest = digestCanonicalJson({ format: this.profile.artifactManifestFormat, witness_digest: witnessDigest, bytes: bytes.length });
           const terms = work.terms as WorkOrderTerms;
           const attribution = { kind: 'AGENT_DECLARED' as const, agentName: text(token, 'agent_name'),
             modelName: nullableText(token, 'model_name'), contributorDisplayName: nullableText(token, 'public_display_name') };
           const agentInvestigation = investigation ? { attribution, investigation,
             interpretationStatus: 'AGENT_DECLARED_UNVERIFIED' as const } : null;
-          const reportEnvelope = { format: 'motive.csqv.checked-report.v1', binding: {
+          const reportEnvelope = { format: this.profile.reportFormat, binding: {
             projectId: text(work, 'project_id'), projectRevision: Number(work.project_revision), workOrderId: assignmentId,
             workOrderRevision: Number(work.revision), agreementId: terms.agreement_id, termsDigest: text(work, 'terms_digest'),
             claimId: text(claim, 'id'), leaseEpoch: Number(claim.lease_epoch), submissionId,
             artifactDigest: witnessDigest, artifactManifestDigest: manifestDigest,
-            checker: { format: CHECKER_FORMAT, version: CHECKER_VERSION, sourceDigest: CHECKER_SOURCE_DIGEST,
+            checker: { format: this.profile.checker.format, version: this.profile.checker.version, sourceDigest: this.profile.checker.sourceDigest,
               evaluationProfileDigest: terms.evaluation.profile_digest },
-          }, agentInvestigation, result: checked };
+          }, agentInvestigation, result: checked.result };
           const reportDigest = digestCanonicalJson(reportEnvelope);
-          const valid = checked.ok; const exactScore = valid ? checked.report.objective.exact_decimal : null;
-          const improves = valid ? checked.report.objective.versus_frozen_reference_5_29109518547430697 === 'greater' : null;
+          const valid = checked.ok; const exactScore = checked.ok ? checked.exactScore : null;
+          const improves = checked.ok ? checked.exceedsReference : null;
           await client.query(`INSERT INTO motive.submissions
             (id,project_id,work_order_id,work_order_revision,origin,operator_actor_id,claim_id,lease_epoch,format,base_commit,
              artifact_manifest_digest,provenance,usage_status,license_acceptance_ref,status)
             VALUES ($1,$2,$3,$4,'EXTERNAL',$5,$6,$7,'motive.submission/0.1',$8,$9,$10::jsonb,'unmetered_external',$11,$12)`,
           [submissionId, work.project_id, assignmentId, work.revision, context.actorId, claim.id, claim.lease_epoch,
-            REFERENCE_COMMIT, manifestDigest, JSON.stringify({ agent_name: token.agent_name, model_name: token.model_name,
+            this.profile.referenceCommit, manifestDigest, JSON.stringify({ agent_name: token.agent_name, model_name: token.model_name,
               usage_status: 'unmetered_external', declared_usage: null, ...(agentInvestigation ? { investigation: agentInvestigation } : {}) }),
             token.license_acceptance_ref, valid ? 'PENDING_EVALUATION' : 'REJECTED']);
           await client.query(`INSERT INTO motive.participation_submission_artifacts
             (submission_id,project_id,agent_token_id,witness_format,witness_bytes,witness_digest,report,report_body,report_digest,
              exact_score,exceeds_reference,contributor_display_name)
-            VALUES ($1,$2,$3,'motive.csqv.witness.v1',$4,$5,$6,$7::jsonb,$8,$9,$10,$11)`,
+            VALUES ($1,$2,$3,$12,$4,$5,$6,$7::jsonb,$8,$9,$10,$11)`,
           [submissionId, work.project_id, token.id, bytes, witnessDigest, valid ? 'VALID' : 'REJECTED', JSON.stringify(reportEnvelope), reportDigest,
-            exactScore, improves, token.public_display_name]);
+            exactScore, improves, token.public_display_name, this.profile.witnessFormat]);
           await this.event(client, text(work, 'project_id'), 'submission', submissionId, 'external.submission_checked', context.actorId,
             { contributor_id: context.tokenId, contributor_display_name: token.public_display_name, submission_id: submissionId,
               report_status: valid ? 'VALID' : 'REJECTED', exact_score: exactScore, exceeds_reference: improves });
@@ -1528,7 +1522,7 @@ export class ParticipationService {
       JOIN motive.projects project ON project.id=reproducibility.project_id
       WHERE reproducibility.submission_id=$1 AND (NOT $2::boolean OR project.visibility='PUBLIC')`, [submissionId, requirePublic]);
     if (result.rowCount !== 1) throw new ParticipationError('NOT_FOUND', 'Submission reproducibility files not found.');
-    const row = result.rows[0]; const base = `/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/${submissionId}/reproducibility`;
+    const row = result.rows[0]; const base = `/api/public/projects/${this.profile.slug}/submissions/${submissionId}/reproducibility`;
     return { format: 'motive.submission-reproducibility.public.v1', submissionId,
       reportDigest: text(row, 'report_digest'), createdAt: dateText(row.created_at), attribution: {
         kind: 'AGENT_DECLARED', credentialId: text(row, 'agent_token_id'), agentName: text(row, 'agent_name'),
@@ -1567,27 +1561,27 @@ export class ParticipationService {
       contributorDisplayName: nullableText(row, 'contributor_display_name'), agentName: text(row, 'agent_name'), modelName: nullableText(row, 'model_name'),
       createdAt: dateText(row.created_at), reportStatus: text(row, 'report') as SubmissionSummary['reportStatus'], artifactSha256: text(row, 'witness_digest'),
       exactScore: nullableText(row, 'exact_score'), exceedsReference: row.exceeds_reference === null ? null : Boolean(row.exceeds_reference),
-      acceptance: decision ?? 'PENDING', artifactHref: `/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/${row.id}/artifact`,
-      reportHref: `/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/${row.id}/report`,
-      investigationHref: row.has_investigation ? `/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/${row.id}/investigation` : null,
+      acceptance: decision ?? 'PENDING', artifactHref: `/api/public/projects/${this.profile.slug}/submissions/${row.id}/artifact`,
+      reportHref: `/api/public/projects/${this.profile.slug}/submissions/${row.id}/report`,
+      investigationHref: row.has_investigation ? `/api/public/projects/${this.profile.slug}/submissions/${row.id}/investigation` : null,
       postCheckAssessmentHref: row.has_post_check_assessment
-        ? `/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/${row.id}/post-check-assessment` : null,
+        ? `/api/public/projects/${this.profile.slug}/submissions/${row.id}/post-check-assessment` : null,
       reproducibilityHref: row.has_reproducibility
-        ? `/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/${row.id}/reproducibility` : null };
+        ? `/api/public/projects/${this.profile.slug}/submissions/${row.id}/reproducibility` : null };
   }
 
   private async challengeOutcome(client:PoolClient,projectId:string):Promise<NonNullable<ParticipationPublicProjection['challengeOutcome']>>{
     const verified=await client.query(`WITH ${DURABLE_VERIFIED_IMPROVEMENTS_CTE}
       SELECT finding_decision_id,review_submission_id,submission_id
       FROM durable_verified_improvements WHERE project_id=$1
-      ORDER BY exact_score::numeric DESC,submission_id ASC LIMIT 1`,[projectId]);
+      ORDER BY exact_score::numeric ${this.scoreOrder},submission_id ASC LIMIT 1`,[projectId]);
     if(verified.rowCount){const row=verified.rows[0];return{status:'VERIFIED',
       candidate:await this.submissionById(client,text(row,'submission_id')),
       findingDecisionId:text(row,'finding_decision_id'),reviewSubmissionId:text(row,'review_submission_id')};}
     const awaiting=await client.query(`SELECT artifact.submission_id
       FROM motive.participation_submission_artifacts artifact
       WHERE artifact.project_id=$1 AND artifact.report='VALID' AND artifact.exceeds_reference=TRUE
-      ORDER BY artifact.exact_score::numeric DESC,artifact.created_at ASC,artifact.submission_id ASC LIMIT 1`,[projectId]);
+      ORDER BY artifact.exact_score::numeric ${this.scoreOrder},artifact.created_at ASC,artifact.submission_id ASC LIMIT 1`,[projectId]);
     return awaiting.rowCount?{status:'AWAITING_REVIEW',
       candidate:await this.submissionById(client,text(awaiting.rows[0],'submission_id')),
       findingDecisionId:null,reviewSubmissionId:null}
@@ -1651,7 +1645,7 @@ export class ParticipationService {
           AND account.provider='supabase'
           AND account.actor_id='account:' || account.subject_id::text
         ORDER BY account.subject_id LIMIT 100`, [projectId]);
-      return { format: 'motive.project-reviewers/0.1', projectSlug: PARTICIPATION_PROJECT_SLUG,
+      return { format: 'motive.project-reviewers/0.1', projectSlug: this.profile.slug,
         reviewers: result.rows.map(row => ({ accountId: text(row, 'account_id') })) };
     });
   }
@@ -1751,7 +1745,7 @@ export class ParticipationService {
             changed = changed || (revokedAccess.rowCount ?? 0) > 0;
           }
           const response: ProjectReviewerChange = { format: 'motive.project-reviewer-change/0.1',
-            projectSlug: PARTICIPATION_PROJECT_SLUG, accountId, action, changed, replayed: false };
+            projectSlug: this.profile.slug, accountId, action, changed, replayed: false };
           if (changed) await this.event(client, projectId, 'membership', text(membership, 'id'),
             action === 'GRANT' ? 'participation.reviewer_granted' : 'participation.reviewer_removed', ownerActorId,
             { account_id: accountId, effect_id: effectId });
@@ -1764,20 +1758,20 @@ export class ParticipationService {
   async getMe(ownerActorId: string): Promise<ParticipationMeResponse> {
     return this.transaction(async client => {
       const tokens = await client.query(`SELECT token.* FROM motive.participation_agent_tokens token JOIN motive.projects project ON project.id=token.project_id
-        WHERE token.owner_actor_id=$1 AND project.slug=$2 ORDER BY token.created_at DESC LIMIT 50`, [ownerActorId, PARTICIPATION_PROJECT_SLUG]);
+        WHERE token.owner_actor_id=$1 AND project.slug=$2 ORDER BY token.created_at DESC LIMIT 50`, [ownerActorId, this.profile.slug]);
       const assignments = await Promise.all(tokens.rows.map(token => this.assignment(client, token)));
       const submissions = await client.query(`SELECT artifact.submission_id FROM motive.participation_submission_artifacts artifact
         JOIN motive.participation_agent_tokens token ON token.id=artifact.agent_token_id WHERE token.owner_actor_id=$1 ORDER BY artifact.created_at DESC LIMIT 50`, [ownerActorId]);
       const membership = await client.query(`SELECT membership.role,account.status FROM motive.memberships membership
         JOIN motive.projects project ON project.id=membership.project_id
         LEFT JOIN motive.account_identities account ON account.actor_id=membership.actor_id
-        WHERE project.slug=$1 AND membership.actor_id=$2 AND membership.revoked_at IS NULL`, [PARTICIPATION_PROJECT_SLUG, ownerActorId]);
+        WHERE project.slug=$1 AND membership.actor_id=$2 AND membership.revoked_at IS NULL`, [this.profile.slug, ownerActorId]);
       const role = membership.rowCount === 1 ? String(membership.rows[0].role) : null;
       const identityAllowsReview = membership.rowCount === 1
         && (membership.rows[0].status === null || membership.rows[0].status === 'ACTIVE');
       const loopProgress = await this.credentialLoopProgress(client, tokens.rows.map(row => text(row, 'id')));
       const sessions = await this.agentSessions(client, tokens.rows);
-      return { projectSlug: PARTICIPATION_PROJECT_SLUG,
+      return { projectSlug: this.profile.slug,
         canReview: identityAllowsReview && role !== null && ['OWNER','STEWARD','REVIEWER'].includes(role),
         canManageReviewers: role === 'OWNER' && membership.rows[0].status === 'ACTIVE',
         credentials: tokens.rows.map(row => this.credential(row)), assignments,
@@ -1805,7 +1799,7 @@ export class ParticipationService {
       observedOutcome: { reportStatus: text(row, 'report') as SubmissionSummary['reportStatus'],
         exactScore: nullableText(row, 'exact_score'),
         exceedsReference: row.exceeds_reference === null ? null : Boolean(row.exceeds_reference),
-        reportHref: `/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/${row.id}/report` },
+        reportHref: `/api/public/projects/${this.profile.slug}/submissions/${row.id}/report` },
       completed: row.completed === true,
       memoryReview: { latestDecision: row.memory_review_decision === null ? null : {
         decision: text(row, 'memory_review_decision') as 'ADMIT'|'DECLINE',
@@ -2015,9 +2009,9 @@ export class ParticipationService {
           SELECT jsonb_agg(jsonb_build_object(
             'submission_id',link.submission_id,'agent_name',link.agent_name,
             'question',link.question,
-            'report_href','/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/' || link.submission_id || '/report',
-            'investigation_href',CASE WHEN link.has_investigation THEN '/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/' || link.submission_id || '/investigation' ELSE NULL END,
-            'post_check_assessment_href',CASE WHEN link.has_assessment THEN '/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/' || link.submission_id || '/post-check-assessment' ELSE NULL END)
+            'report_href','/api/public/projects/${this.profile.slug}/submissions/' || link.submission_id || '/report',
+            'investigation_href',CASE WHEN link.has_investigation THEN '/api/public/projects/${this.profile.slug}/submissions/' || link.submission_id || '/investigation' ELSE NULL END,
+            'post_check_assessment_href',CASE WHEN link.has_assessment THEN '/api/public/projects/${this.profile.slug}/submissions/' || link.submission_id || '/post-check-assessment' ELSE NULL END)
             ORDER BY link.created_at,link.submission_id) AS links
           FROM (
             SELECT DISTINCT ON (candidate.submission_id) candidate.*,
@@ -2106,7 +2100,7 @@ export class ParticipationService {
 
   private async publicJournalProject(client:PoolClient):Promise<string>{
     const project=await client.query(`SELECT id FROM motive.projects WHERE slug=$1 AND visibility='PUBLIC'`,
-      [PARTICIPATION_PROJECT_SLUG]);
+      [this.profile.slug]);
     if(project.rowCount!==1)throw new ParticipationError('NOT_FOUND','Research journal was not found.');
     return text(project.rows[0],'id');
   }
@@ -2271,7 +2265,7 @@ export class ParticipationService {
       JOIN motive.account_identities account ON account.actor_id=membership.actor_id
         AND account.status='ACTIVE'
       WHERE project.slug=$1 AND project.visibility='PUBLIC'
-      ${lock?'FOR SHARE OF membership,account':''}`,[PARTICIPATION_PROJECT_SLUG,reviewerActorId]);
+      ${lock?'FOR SHARE OF membership,account':''}`,[this.profile.slug,reviewerActorId]);
     if(result.rowCount!==1)throw new ParticipationError('FORBIDDEN','Current project reviewer authority is required.');
     return text(result.rows[0],'id');
   }
@@ -2329,7 +2323,7 @@ export class ParticipationService {
         submissionId:null,limit:21,contributorMembershipId:contributorId,namedOnly:true});
       if(!result.cursorFound)throw new ParticipationError('NOT_FOUND','Contributor research journal was not found.');
       const page=this.journalPage(result.entries);
-      return{format:'motive.contributor-journal/0.1',projectSlug:PARTICIPATION_PROJECT_SLUG,
+      return{format:'motive.contributor-journal/0.1',projectSlug:this.profile.slug,
         contributorId,items:page.items,nextCursor:page.nextCursor};});
   }
 
@@ -2344,7 +2338,7 @@ export class ParticipationService {
         submissionId:null,limit:21,contributorMembershipId:contributorId,namedOnly:true,acceptedFindingsOnly:true});
       if(!result.cursorFound)throw new ParticipationError('NOT_FOUND','Contributor accepted findings were not found.');
       const page=this.journalPage(result.entries);
-      return{format:'motive.contributor-journal/0.1',projectSlug:PARTICIPATION_PROJECT_SLUG,
+      return{format:'motive.contributor-journal/0.1',projectSlug:this.profile.slug,
         contributorId,items:page.items,nextCursor:page.nextCursor};});
   }
 
@@ -2383,7 +2377,7 @@ export class ParticipationService {
         agentName:text(row,'agent_name'),submittedAt:dateText(row.submitted_at),
         review:{id:text(row,'review_id'),decision:'ADMIT' as const,reviewedAt:dateText(row.reviewed_at),
           rationale:text(row,'rationale')}}));
-      return{format:'motive.contributor-reviewed-artifacts/0.1',projectSlug:PARTICIPATION_PROJECT_SLUG,
+      return{format:'motive.contributor-reviewed-artifacts/0.1',projectSlug:this.profile.slug,
         contributorId,items,nextCursor:hasMore?items[items.length-1]!.witnessDigest:null};});
   }
 
@@ -2407,7 +2401,7 @@ export class ParticipationService {
 
   async publicProjection(): Promise<ParticipationPublicProjection> {
     return this.transaction(async client => {
-      const project = await client.query(`SELECT id,current_revision FROM motive.projects WHERE slug=$1 AND visibility='PUBLIC'`, [PARTICIPATION_PROJECT_SLUG]);
+      const project = await client.query(`SELECT id,current_revision FROM motive.projects WHERE slug=$1 AND visibility='PUBLIC'`, [this.profile.slug]);
       if (project.rowCount !== 1) throw new ParticipationError('NOT_FOUND', 'Project not found.');
       const projectId = text(project.rows[0], 'id');
       const counts = await client.query(`SELECT
@@ -2439,11 +2433,11 @@ export class ParticipationService {
       const best = await client.query(`SELECT artifact.submission_id FROM motive.participation_submission_artifacts artifact
         JOIN motive.participation_submission_reviews review ON review.submission_id=artifact.submission_id
         WHERE artifact.project_id=$1 AND artifact.report='VALID' AND review.decision='ACCEPTED'
-        ORDER BY artifact.exact_score::numeric DESC,artifact.created_at,artifact.submission_id LIMIT 1`, [projectId]);
+        ORDER BY artifact.exact_score::numeric ${this.scoreOrder},artifact.created_at,artifact.submission_id LIMIT 1`, [projectId]);
       const bestChecked = await client.query(`SELECT artifact.submission_id
         FROM motive.participation_submission_artifacts artifact
         WHERE artifact.project_id=$1 AND artifact.report='VALID' AND artifact.exact_score IS NOT NULL
-        ORDER BY artifact.exact_score::numeric DESC,artifact.created_at,artifact.submission_id LIMIT 1`, [projectId]);
+        ORDER BY artifact.exact_score::numeric ${this.scoreOrder},artifact.created_at,artifact.submission_id LIMIT 1`, [projectId]);
       const projectedSubmissionIds = submissions.rows.map(row => text(row, 'submission_id'));
       const contributors = await client.query(`WITH ${LATEST_SUBMISSION_ADMISSION_CTES}
         SELECT membership.id::text AS id,
@@ -2508,7 +2502,7 @@ export class ParticipationService {
         {ownerActorId:null,before:null,eventId:null,limit:6})).items;
       const challengeOutcome=await this.challengeOutcome(client,projectId);
       const total = Number(counts.rows[0].submissions); const active = Number(counts.rows[0].active); const accepted = Number(counts.rows[0].accepted);
-      return { project: { slug: PARTICIPATION_PROJECT_SLUG, visibility: 'PUBLIC',
+      return { project: { slug: this.profile.slug, visibility: 'PUBLIC',
         lifecycle: total > 0 ? 'RESULTS_AVAILABLE' : active > 0 ? 'CONTRIBUTING' : 'NOT_STARTED', projectRevision: Number(project.rows[0].current_revision) },
         activeAssignments: active, totalSubmissions: total, acceptedResults: accepted,
         bestChecked: bestChecked.rowCount
@@ -2579,7 +2573,7 @@ export class ParticipationService {
       JOIN motive.submissions submission ON submission.id=artifact.submission_id AND submission.project_id=artifact.project_id
       JOIN motive.projects project ON project.id=artifact.project_id
       WHERE artifact.submission_id=ANY($1::uuid[]) AND project.slug=$2 AND project.visibility='PUBLIC'`,
-    [ids, PARTICIPATION_PROJECT_SLUG]);
+    [ids, this.profile.slug]);
     if (result.rowCount !== ids.length) throw new ParticipationError('NOT_FOUND', 'Submission geometry is not available.');
     const rows = new Map(result.rows.map(row => [text(row, 'submission_id'), row]));
     const read = (submissionId: string) => {
@@ -2590,7 +2584,7 @@ export class ParticipationService {
       }
       const bytes = row.witness_bytes;
       const digest = text(row, 'witness_digest');
-      if (!Buffer.isBuffer(bytes) || bytes.byteLength < 1 || bytes.byteLength > CSQV_MAX_BYTES
+      if (!Buffer.isBuffer(bytes) || bytes.byteLength < 1 || bytes.byteLength > this.profile.maximumWitnessBytes
         || !CANONICAL_SHA256.test(digest) || sha256(bytes) !== digest) {
         throw new ParticipationError('CONFLICT', 'Stored geometry comparison evidence is invalid.');
       }
@@ -2600,7 +2594,9 @@ export class ParticipationService {
       return { submissionId, artifactSha256: digest, witness };
     };
     const left = read(leftSubmissionId); const right = read(rightSubmissionId);
-    const comparison = compareCirclePackingWitnesses(left.witness, right.witness);
+    const compare = this.profile.compareWitnesses;
+    if (!compare) throw new ParticipationError('NOT_FOUND', 'Geometry comparison is not available for this project.');
+    const comparison = compare(left.witness, right.witness);
     if (!comparison.ok) throw new ParticipationError('CONFLICT', 'Stored geometry comparison evidence is invalid.');
     return { format: 'motive.csqv.geometry-comparison.v1',
       left: { submissionId: left.submissionId, artifactSha256: left.artifactSha256 },
@@ -2624,7 +2620,7 @@ export class ParticipationService {
         workOrderRevision: row.work_order_revision, agreementId: terms.agreement_id, termsDigest: row.terms_digest,
         claimId: row.claim_id, leaseEpoch: Number(row.lease_epoch), submissionId: row.submission_id,
         artifactDigest: row.witness_digest, artifactManifestDigest: row.artifact_manifest_digest,
-        checker: { format: CHECKER_FORMAT, version: CHECKER_VERSION, sourceDigest: CHECKER_SOURCE_DIGEST,
+        checker: { format: this.profile.checker.format, version: this.profile.checker.version, sourceDigest: this.profile.checker.sourceDigest,
           evaluationProfileDigest: terms.evaluation.profile_digest } },
       exactScore: row.exact_score, exceedsReference: row.exceeds_reference,
       acceptance: row.decision ?? 'PENDING', localOnly: true, report: row.report_body };
@@ -2662,7 +2658,7 @@ export class ParticipationService {
         workOrderRevision: Number(row.intent_work_order_revision), declaredAt: dateText(row.intent_created_at) } : null,
       evidence: { reportStatus: text(row, 'report') as PublicSubmissionInvestigation['evidence']['reportStatus'],
         exactScore: nullableText(row, 'exact_score'), exceedsReference: row.exceeds_reference === null ? null : Boolean(row.exceeds_reference),
-        reportHref: `/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/${row.id}/report` },
+        reportHref: `/api/public/projects/${this.profile.slug}/submissions/${row.id}/report` },
       interpretationStatus: 'AGENT_DECLARED_UNVERIFIED',
       notice: 'The proposal, expectation, observations, assessment, and next action are contributor statements. A research-context citation records the retained baseline supplied with the investigation; it does not prove the contributor used it in its reasoning. The protected checker report is separate evidence.' };
   }

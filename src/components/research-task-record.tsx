@@ -8,6 +8,7 @@ import { ResearchAdmission } from './research-admission';
 import { ResearchFindingReview, findingOutcomeLabel } from './research-finding-review';
 import { SubmissionReview } from './project-live';
 import { TaskAgent, TaskTime, useMinuteClock } from './task-row-parts';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 function usePublicRecord<T>(href: string | null) {
   const [result, setResult] = useState<{ href: string; data?: T; error?: string } | null>(null);
@@ -37,7 +38,8 @@ function RecordLoading({ label, loading, error, reload }: { label: string; loadi
 }
 
 function LaterResearch({ id }: { id: string }) {
-  const later = useCitingResearch(id);
+  const slug = useProjectSlug();
+  const later = useCitingResearch(id, slug);
   const [visible, setVisible] = useState(3);
   const now = useMinuteClock();
   if (!later.items.length && !later.error) return null;
@@ -46,7 +48,7 @@ function LaterResearch({ id }: { id: string }) {
     <p className="field-hint">These tasks cite this experiment. A citation does not establish agreement.</p>
     <ul className="task-record-later-rows">{later.items.slice(0, visible).map(entry => {
       const summary = researchDigest(entry.update);
-      return <li key={entry.submission.id}><a href={`/?project=circle-packing&experiment=${entry.submission.id}`}>
+      return <li key={entry.submission.id}><a href={`${projectLink(slug)}&experiment=${entry.submission.id}`}>
         <TaskAgent name={entry.submission.agentName} /><span className="task-record-later-question">{summary.question}</span>
         <TaskTime value={entry.submission.createdAt} now={now} />
       </a></li>;
@@ -61,7 +63,9 @@ function LaterResearch({ id }: { id: string }) {
 }
 
 export function ResearchTaskRecord({ id, me, accountId }: { id: string; me: ParticipationMeResponse | null; accountId: string | null }) {
-  const journal = useJournalEntry(id);
+  const slug = useProjectSlug();
+  const words = projectWords(slug);
+  const journal = useJournalEntry(id, slug);
   const ownership = useSubmissionOwnership(accountId, [id]);
   const entry = journal.entry;
   const investigation = usePublicRecord<PublicSubmissionInvestigation>(entry?.submission.investigationHref ?? null);
@@ -70,8 +74,8 @@ export function ResearchTaskRecord({ id, me, accountId }: { id: string; me: Part
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [findingOpen, setFindingOpen] = useState(false);
 
-  if (journal.loading) return <section className="research-task-record"><a className="inline-link" href="/?project=circle-packing#project-tasks">← All tasks</a><p role="status">Loading experiment…</p></section>;
-  if (journal.error) return <section className="research-task-record"><a className="inline-link" href="/?project=circle-packing#project-tasks">← All tasks</a><p role="alert">{journal.error} <button type="button" className="inline-link" onClick={journal.reload}>Retry</button></p></section>;
+  if (journal.loading) return <section className="research-task-record"><a className="inline-link" href={`${projectLink(slug)}#project-tasks`}>← All tasks</a><p role="status">Loading experiment…</p></section>;
+  if (journal.error) return <section className="research-task-record"><a className="inline-link" href={`${projectLink(slug)}#project-tasks`}>← All tasks</a><p role="alert">{journal.error} <button type="button" className="inline-link" onClick={journal.reload}>Retry</button></p></section>;
   if (!entry) return null;
 
   const { submission, update } = entry;
@@ -99,7 +103,7 @@ export function ResearchTaskRecord({ id, me, accountId }: { id: string; me: Part
     || declared.expectation !== notes.expectation || JSON.stringify(declared.conditions) !== JSON.stringify(notes.conditions)));
 
   return <article className="research-task-record" id={`research-${id}`}>
-    <a className="inline-link" href="/?project=circle-packing#project-tasks">← All tasks</a>
+    <a className="inline-link" href={`${projectLink(slug)}#project-tasks`}>← All tasks</a>
     <header className="task-record-heading"><p className="eyebrow">Experiment · {submission.agentName}</p><h1>{digest.question}</h1>
       <p>{own ? 'Your agent' : submission.contributorDisplayName || 'Project contributor'} · <time dateTime={submission.createdAt}>{new Date(submission.createdAt).toLocaleString()}</time></p></header>
 
@@ -112,15 +116,15 @@ export function ResearchTaskRecord({ id, me, accountId }: { id: string; me: Part
       <p className="field-hint">{acceptedFinding ? `${acceptedFinding.outcome ? findingOutcomeLabel[acceptedFinding.outcome] : 'Finding reviewed'} · ${acceptedFinding.novelty === 'DISTINCT' ? 'independently accepted as distinct' : acceptedFinding.novelty === 'DUPLICATE' ? 'independently accepted as a duplicate' : 'independently reviewed'}`
         : findingReview?.decision === 'DECLINE' ? 'Finding declined by the independent reviewer'
           : 'Finding awaiting independent review'}</p>
-      {findingReview?.reviewSubmissionId ? <a className="inline-link" href={`/?project=circle-packing&experiment=${findingReview.reviewSubmissionId}`}>View the validating experiment ↗</a> : null}
+      {findingReview?.reviewSubmissionId ? <a className="inline-link" href={`${projectLink(slug)}&experiment=${findingReview.reviewSubmissionId}`}>View the validating experiment ↗</a> : null}
     </section>
 
     <LaterResearch key={id} id={id} />
 
-    <section className="task-record-block task-record-check"><h3>Submitted packing</h3>
-      <p><strong>{submission.reportStatus === 'VALID' ? 'Valid geometry' : submission.reportStatus === 'REJECTED' ? 'Rejected geometry' : 'Inconclusive check'}</strong></p>
-      {submission.exactScore ? <p>Exact sum of radii: <strong>{submission.exactScore}</strong></p> : <p>No exact score was established.</p>}
-      <p className="field-hint">This check covers the submitted coordinates. Trial results may contain other packings.</p>
+    <section className="task-record-block task-record-check"><h3>{words.submitted}</h3>
+      <p><strong>{submission.reportStatus === 'VALID' ? words.checkValid : submission.reportStatus === 'REJECTED' ? words.checkRejected : 'Inconclusive check'}</strong></p>
+      {submission.exactScore ? <p>{words.objective}: <strong>{submission.exactScore}</strong></p> : <p>No exact score was established.</p>}
+      <p className="field-hint">{words.checkScope}</p>
     </section>
 
     <section className="task-record-block"><h3>Next</h3><p>{next || 'No next step was retained.'}</p></section>
@@ -151,14 +155,14 @@ export function ResearchTaskRecord({ id, me, accountId }: { id: string; me: Part
     </div></details>
 
     <section className="task-record-block"><h3>Source links</h3>
-      <ul className="task-record-sources"><li><a href={submission.artifactHref} target="_blank" rel="noreferrer">Submitted circle coordinates and sizes ↗</a></li>
-        <li><a href={submission.reportHref} target="_blank" rel="noreferrer">Exact geometry report ↗</a></li>
+      <ul className="task-record-sources"><li><a href={submission.artifactHref} target="_blank" rel="noreferrer">Submitted {words.artifact.toLowerCase()} ↗</a></li>
+        <li><a href={submission.reportHref} target="_blank" rel="noreferrer">{words.report} report ↗</a></li>
         {submission.investigationHref ? <li><a href={submission.investigationHref} target="_blank" rel="noreferrer">Full research narrative ↗</a></li> : null}
         {submission.postCheckAssessmentHref ? <li><a href={submission.postCheckAssessmentHref} target="_blank" rel="noreferrer">Post-check assessment ↗</a></li> : null}
         {submission.reproducibilityHref ? <li><a href={submission.reproducibilityHref} target="_blank" rel="noreferrer">Source and trial manifest ↗</a></li> : null}
         {reproducibility.data?.files.map(file => <li key={file.role}><a href={file.href} download>{file.role === 'SOLVER_SOURCE' ? 'Download solver source' : 'Download trial results'} ↗</a></li>)}</ul>
       <RecordLoading label="source manifest" {...reproducibility} />
-      {update.citedEarlierMotiveSubmissions.length ? <><strong>Earlier experiments cited</strong><ul>{update.citedEarlierMotiveSubmissions.map(prior => <li key={prior.submissionId}><a href={`/?project=circle-packing&experiment=${prior.submissionId}`}>{prior.question?.trim() ? researchQuestionExcerpt(prior.question) : `Experiment ${prior.submissionId.slice(0, 8)}`}</a><span className="field-hint"> · {prior.agentName}</span></li>)}</ul></> : null}
+      {update.citedEarlierMotiveSubmissions.length ? <><strong>Earlier experiments cited</strong><ul>{update.citedEarlierMotiveSubmissions.map(prior => <li key={prior.submissionId}><a href={`${projectLink(slug)}&experiment=${prior.submissionId}`}>{prior.question?.trim() ? researchQuestionExcerpt(prior.question) : `Experiment ${prior.submissionId.slice(0, 8)}`}</a><span className="field-hint"> · {prior.agentName}</span></li>)}</ul></> : null}
       {notes?.researchReferences?.length ? <><strong>Retained Hypothesis references declared by the agent</strong><ul>{notes.researchReferences.map(reference => <li key={`${reference.snapshotId}:${reference.hypothesisId}`}>{reference.hypothesisId} · snapshot {reference.snapshotId}</li>)}</ul></> : null}
     </section>
 

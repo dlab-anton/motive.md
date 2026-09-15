@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { ResearchJournalEntry, ResearchJournalPage } from './participation';
 import { authenticatedFetch } from './account-fetch';
+import { DEFAULT_PROJECT_SLUG, accountProjectPath, publicProjectPath } from './project-slug';
 
-export const journalPath = '/api/public/projects/circle-packing/research-updates';
+export const journalPathFor = (slug: string) => publicProjectPath(slug, '/research-updates'); export const journalPath = journalPathFor(DEFAULT_PROJECT_SLUG);
 export const journalIdPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 
-export async function readJournalPage(mine: boolean, before: string, signal: AbortSignal): Promise<ResearchJournalPage> {
-  const path = `${mine ? '/api/participation/research-updates' : journalPath}?before=${encodeURIComponent(before)}`;
+export async function readJournalPage(mine: boolean, before: string, signal: AbortSignal, slug = DEFAULT_PROJECT_SLUG): Promise<ResearchJournalPage> {
+  const path = `${mine ? accountProjectPath(slug, '/research-updates') : journalPathFor(slug)}?before=${encodeURIComponent(before)}`;
   const response = await (mine ? authenticatedFetch : fetch)(path, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), credentials: 'same-origin', redirect: 'error' });
   if (!response.ok) throw new Error(response.status === 404
     ? 'The place saved in this journal is no longer available. Return to the latest experiments to continue.'
@@ -15,13 +16,13 @@ export async function readJournalPage(mine: boolean, before: string, signal: Abo
 }
 
 /** One focused read per navigation/retry. Older links never walk the whole journal. */
-export function useJournalEntry(id: string | null) {
+export function useJournalEntry(id: string | null, slug = DEFAULT_PROJECT_SLUG) {
   const [value, setValue] = useState<{ id: string; entry?: ResearchJournalEntry; error?: string } | null>(null);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!id || !journalIdPattern.test(id)) return;
     const controller = new AbortController();
-    void fetch(`${journalPath}/${id}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]), credentials: 'same-origin', redirect: 'error' })
+    void fetch(`${journalPathFor(slug)}/${id}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]), credentials: 'same-origin', redirect: 'error' })
       .then(async response => {
         if (!response.ok) throw new Error(response.status === 404 ? 'This experiment is not available in the public project.' : 'This experiment could not be loaded. Please try again.');
         const entry = await response.json() as ResearchJournalEntry;
@@ -47,7 +48,7 @@ export function mergeJournalEntries(...groups: ResearchJournalEntry[][]): Resear
 }
 
 /** Read only exact later citations of this task; preserve loaded rows on retry. */
-export function useCitingResearch(id: string) {
+export function useCitingResearch(id: string, slug = DEFAULT_PROJECT_SLUG) {
   const [cursor, setCursor] = useState({ id: '', before: '' });
   const [retry, setRetry] = useState(0);
   const [value, setValue] = useState<{
@@ -59,7 +60,7 @@ export function useCitingResearch(id: string) {
     const controller = new AbortController();
     setValue(previous => previous?.id === id ? { ...previous, loading: true, error: '' }
       : { id, items: [], nextCursor: null, loading: true, error: '' });
-    const path = `${journalPath}/${id}/citing${before ? `?before=${encodeURIComponent(before)}` : ''}`;
+    const path = `${journalPathFor(slug)}/${id}/citing${before ? `?before=${encodeURIComponent(before)}` : ''}`;
     void fetch(path, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
       credentials: 'same-origin', redirect: 'error' }).then(async response => {
       if (!response.ok) throw new Error('Later work could not be loaded.');

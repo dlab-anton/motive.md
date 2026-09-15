@@ -378,6 +378,7 @@ function errorResponse(error: unknown, _req: Request, res: Response, next: NextF
 }
 
 export function createParticipationRouters(options: RouterOptions) {
+  const slug = options.service.profile.slug;
   const accountRouter = Router();
   accountRouter.use('/reviewers', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   accountRouter.use('/finding-review-queue', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
@@ -386,11 +387,11 @@ export function createParticipationRouters(options: RouterOptions) {
   accountRouter.post('/join', async (req, res) => {
     const identity = account(res); const body = req.body;
     if (!object(body) || !exact(body, ['projectSlug', 'publishDisplayName', 'acceptReferenceTerms'])
-      || body.projectSlug !== 'circle-packing'
+      || body.projectSlug !== slug
       || typeof body.publishDisplayName !== 'boolean' || body.acceptReferenceTerms !== true) {
       throw new ParticipationError('VALIDATION', 'Join body is invalid.');
     }
-    const input: JoinParticipationInput = { projectSlug: 'circle-packing', publishDisplayName: body.publishDisplayName,
+    const input: JoinParticipationInput = { projectSlug: slug, publishDisplayName: body.publishDisplayName,
       acceptReferenceTerms: true };
     res.status(201).json(await options.service.join(identity.actorId, identity.accountName, input, idempotency(req)));
   });
@@ -528,7 +529,7 @@ export function createParticipationRouters(options: RouterOptions) {
     // Reuses the live account, project membership and bearer checks above.
     await options.service.getAgentAssignment(agent(res));
     if (!options.researchMemory) { res.status(503).json({ error: 'Research memory is not configured.' }); return; }
-    res.json(await options.researchMemory.getContext('circle-packing', researchContextPage(req.query)));
+    res.json(await options.researchMemory.getContext(slug, researchContextPage(req.query)));
   });
   agentRouter.get('/research-context/hypotheses/:hypothesisId', async (req, res) => {
     await options.service.getAgentAssignment(agent(res));
@@ -536,13 +537,13 @@ export function createParticipationRouters(options: RouterOptions) {
     if (!CANONICAL_UUID.test(hypothesisId)) throw new ParticipationError('VALIDATION', 'hypothesisId must be a canonical lowercase UUID.');
     const evidenceOffset = researchHypothesisEvidenceOffset(req.query);
     if (!options.researchMemory) { res.status(503).json({ error: 'Research memory is not configured.' }); return; }
-    res.json(await options.researchMemory.getHypothesisContext('circle-packing', hypothesisId, evidenceOffset));
+    res.json(await options.researchMemory.getHypothesisContext(slug, hypothesisId, evidenceOffset));
   });
   agentRouter.get('/research-context/retained-latest', async (req, res) => {
     await options.service.getAgentAssignment(agent(res));
     if (Object.keys(req.query).length) throw new ParticipationError('VALIDATION', 'Retained research context does not accept query parameters.');
     if (!options.researchMemory) { res.status(503).json({ error: 'Research memory is not configured.' }); return; }
-    res.json(await options.researchMemory.getLatestRetainedContext('circle-packing'));
+    res.json(await options.researchMemory.getLatestRetainedContext(slug));
   });
   agentRouter.get('/research-context/snapshots/:snapshotId', async (req, res) => {
     const context = agent(res);
@@ -626,7 +627,7 @@ export function createParticipationRouters(options: RouterOptions) {
   publicRouter.get('/contributors/:contributorId/reviewed-artifacts',async(req,res)=>{res.set('Cache-Control','no-store');
     const after=reviewedArtifactAfter(req);
     res.json(await options.service.publicContributorReviewedArtifacts(contributorId(req),after));});
-  publicRouter.get('/research-scope', async (_req, res) => res.json(options.researchMemory ? await options.researchMemory.getPublicScope('circle-packing') : null));
+  publicRouter.get('/research-scope', async (_req, res) => res.json(options.researchMemory ? await options.researchMemory.getPublicScope(slug) : null));
   publicRouter.get('/submissions/:submissionId/geometry-comparison', async (req, res) => {
     res.set('Cache-Control', 'no-store'); const ids = geometryComparisonIds(req);
     res.json(await options.service.publicGeometryComparison(ids.left, ids.right));
@@ -634,7 +635,7 @@ export function createParticipationRouters(options: RouterOptions) {
   publicRouter.get('/submissions/:submissionId/artifact', async (req, res) => {
     const id = submissionId(req); const artifact = await options.service.publicArtifact(id);
     res.set({ 'Content-Type': 'application/json; charset=utf-8', 'X-Content-Type-Options': 'nosniff', ETag: `"${artifact.digest}"`,
-      'Content-Disposition': `attachment; filename="circle-packing-${id}.json"` }).send(artifact.bytes);
+      'Content-Disposition': `attachment; filename="${slug}-${id}.json"` }).send(artifact.bytes);
   });
   publicRouter.get('/submissions/:submissionId/report', async (req, res) => res.json(await options.service.publicReport(submissionId(req))));
   publicRouter.get('/submissions/:submissionId/investigation', async (req, res) => res.json(await options.service.publicInvestigation(submissionId(req))));
@@ -643,17 +644,17 @@ export function createParticipationRouters(options: RouterOptions) {
   publicRouter.get('/submissions/:submissionId/research-admission', async (req, res) => {
     noAdmissionQuery(req);
     if (!options.researchAdmission) { res.status(503).json({ error: 'Research admission is not configured.' }); return; }
-    const admission = await options.researchAdmission.publicAdmission('circle-packing', submissionId(req));
+    const admission = await options.researchAdmission.publicAdmission(slug, submissionId(req));
     res.json({ format: admission.format, submissionId: admission.submissionId, status: admission.status,
       latestReview: admission.latestReview ? { decision: admission.latestReview.decision,
         rationale: admission.latestReview.rationale, reviewedAt: admission.latestReview.reviewedAt } : null });
   });
   publicRouter.get('/submissions/:submissionId/finding-review/history',async(req,res)=>{res.set('Cache-Control','no-store');
     if(!options.findingAssessment){res.status(503).json({error:'Finding review is not configured.'});return;}
-    res.json(await options.findingAssessment.publicHistory('circle-packing',submissionId(req),findingHistoryBefore(req)));});
+    res.json(await options.findingAssessment.publicHistory(slug,submissionId(req),findingHistoryBefore(req)));});
   publicRouter.get('/submissions/:submissionId/finding-review',async(req,res)=>{res.set('Cache-Control','no-store');noFindingQuery(req);
     if(!options.findingAssessment){res.status(503).json({error:'Finding review is not configured.'});return;}
-    res.json(await options.findingAssessment.publicReview('circle-packing',submissionId(req)));});
+    res.json(await options.findingAssessment.publicReview(slug,submissionId(req)));});
   publicRouter.get('/submissions/:submissionId/reproducibility', async (req, res) =>
     res.json(await options.service.publicSubmissionReproducibility(submissionId(req))));
   const reproducibilityFile = (role: 'SOLVER_SOURCE' | 'TRIAL_RESULTS') => async (req: Request, res: Response) => {

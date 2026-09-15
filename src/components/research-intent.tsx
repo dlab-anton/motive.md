@@ -1,5 +1,6 @@
 import { researchDigest, researchQuestionExcerpt } from '@/lib/research-digest';
 import type { PublicResearchUpdate, SubmissionMotiveReference } from '@/lib/participation';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 type ResearchIntent = {
   proposal: string;
@@ -18,12 +19,13 @@ export function ResearchIntentCard({ intent, agentName, contributorName, stale =
   historical?: boolean;
   relatedUpdates?: PublicResearchUpdate[];
 }) {
+  const slug = useProjectSlug();
   const question = researchQuestionExcerpt(intent.proposal);
   const sources = (intent.motiveReferences ?? []).map(reference => {
     const related = relatedUpdates.find(update => update.submissionId === reference.submissionId && update.reportDigest === reference.reportDigest);
     return { id: reference.submissionId,
       label: related ? researchDigest(related).question : 'Earlier experiment',
-      href: related ? `/?project=circle-packing&tab=updates#research-${reference.submissionId}` : `/api/public/projects/circle-packing/submissions/${reference.submissionId}/report` };
+      href: related ? `${projectLink(slug)}&tab=updates#research-${reference.submissionId}` : `${publicProjectPath(slug)}/submissions/${reference.submissionId}/report` };
   });
   return <section className="research-intent" aria-label={agentName ? `${agentName}'s proposed experiment` : 'Your agent’s proposed experiment'}>
     <div className="research-intent-heading"><span className="eyebrow">{historical ? 'Initial declared plan' : stale ? 'Last recorded proposal' : 'Proposed experiment'}</span>{agentName ? <span>{agentName}{contributorName ? ` · ${contributorName}` : ''}</span> : null}</div>

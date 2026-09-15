@@ -7,14 +7,14 @@ export const PARTICIPATION_PROJECT_SLUG = 'circle-packing' as const;
 export const PARTICIPATION_WITNESS_FORMAT = 'motive.csqv.witness.v1' as const;
 
 export type JoinParticipationInput = {
-  projectSlug: typeof PARTICIPATION_PROJECT_SLUG;
+  projectSlug: string;
   publishDisplayName: boolean;
   acceptReferenceTerms: true;
 };
 
 export type AgentTokenProjection = {
   id: string;
-  projectSlug: typeof PARTICIPATION_PROJECT_SLUG;
+  projectSlug: string;
   agentName: string;
   modelName: string | null;
   publicDisplayName: string | null;
@@ -45,7 +45,7 @@ export type AssignmentProjection = {
   id: string;
   credentialId: string;
   claimId: string | null;
-  projectSlug: typeof PARTICIPATION_PROJECT_SLUG;
+  projectSlug: string;
   projectRevision: number;
   workOrderId: string;
   workOrderRevision: number;
@@ -118,7 +118,7 @@ export type AgentSessionProjection = {
 };
 
 export type ParticipationMeResponse = {
-  projectSlug: typeof PARTICIPATION_PROJECT_SLUG;
+  projectSlug: string;
   canReview: boolean;
   canManageReviewers?: boolean;
   credentials: AgentTokenProjection[];
@@ -433,7 +433,7 @@ export type MemoryReviewQueuePage = ResearchJournalPage;
 
 export type PublicContributorJournalPage = {
   format: 'motive.contributor-journal/0.1';
-  projectSlug: typeof PARTICIPATION_PROJECT_SLUG;
+  projectSlug: string;
   /** Opaque project membership id; it is not an account or agent credential id. */
   contributorId: string;
   items: ResearchJournalEntry[];
@@ -447,7 +447,7 @@ export type SubmissionOwnershipProjection = {
 
 export type ParticipationPublicProjection = {
   project: {
-    slug: typeof PARTICIPATION_PROJECT_SLUG;
+    slug: string;
     visibility: 'PUBLIC';
     lifecycle: 'NOT_STARTED' | 'CONTRIBUTING' | 'RESULTS_AVAILABLE';
     projectRevision: number;

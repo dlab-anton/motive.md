@@ -8,15 +8,16 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Label } from './ui/label';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 type Change = { accountId: string; action: 'GRANT' | 'REMOVE'; key: string };
 class AccessError extends Error { constructor(message: string, readonly uncertain = false) { super(message); } }
 
-async function request(path: string, signal: AbortSignal, change?: Change) {
+async function request(path: string, signal: AbortSignal, slug: string, change?: Change) {
   let response: Response;
   try {
-    response = await authenticatedFetch(`/api/participation/reviewers${path}`, {
+    response = await authenticatedFetch(`${accountProjectPath(slug, '/reviewers')}${path}`, {
       signal: AbortSignal.any([signal, AbortSignal.timeout(20000)]),
       ...(change ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': change.key },
         body: JSON.stringify({ accountId: change.accountId }) } : {}),
@@ -51,14 +52,16 @@ export function ProjectReviewSettings({ accountId, canManage }: { accountId: str
 }
 
 function ReviewerOwnerControls({ accountId }: { accountId: string }) {
+  const slug = useProjectSlug();
   const [open, setOpen] = useState(false);
   return <details className="reviewer-owner-controls" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>Manage circle-packing reviewers</summary>
+    <summary>Manage {slug} reviewers</summary>
     {open ? <ReviewerManager key={accountId} ownerAccountId={accountId} /> : null}
   </details>;
 }
 
 function ReviewerManager({ ownerAccountId }: { ownerAccountId: string }) {
+  const slug = useProjectSlug();
   const [reviewers, setReviewers] = useState<ProjectReviewers | null>(null);
   const [accountId, setAccountId] = useState('');
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -78,8 +81,8 @@ function ReviewerManager({ ownerAccountId }: { ownerAccountId: string }) {
     const readSignal = AbortSignal.any([signal, read.signal]);
     setLoading(true); setError('');
     try {
-      const value = await request('', readSignal) as ProjectReviewers;
-      if (value?.format !== 'motive.project-reviewers/0.1' || value.projectSlug !== 'circle-packing'
+      const value = await request('', readSignal, slug) as ProjectReviewers;
+      if (value?.format !== 'motive.project-reviewers/0.1' || value.projectSlug !== slug
         || !Array.isArray(value.reviewers) || value.reviewers.length > 100
         || value.reviewers.some(person => !person || typeof person.accountId !== 'string' || !UUID.test(person.accountId))
         || new Set(value.reviewers.map(person => person.accountId)).size !== value.reviewers.length) throw new AccessError('The access list couldn’t be read. Please refresh it.');
@@ -98,8 +101,8 @@ function ReviewerManager({ ownerAccountId }: { ownerAccountId: string }) {
     pending.current = true; setBusy(true); setError(''); setNotice('');
     const signal = lifetime.current.signal;
     try {
-      const value = await request(change.action === 'REMOVE' ? '/remove' : '', signal, change) as ProjectReviewerChange;
-      if (value?.format !== 'motive.project-reviewer-change/0.1' || value.projectSlug !== 'circle-packing'
+      const value = await request(change.action === 'REMOVE' ? '/remove' : '', signal, slug, change) as ProjectReviewerChange;
+      if (value?.format !== 'motive.project-reviewer-change/0.1' || value.projectSlug !== slug
         || value.accountId !== change.accountId || value.action !== change.action
         || typeof value.changed !== 'boolean' || typeof value.replayed !== 'boolean') throw new AccessError('The change could not be confirmed. Retry the same request.', true);
       if (!signal.aborted) {
@@ -133,6 +136,6 @@ function ReviewerManager({ ownerAccountId }: { ownerAccountId: string }) {
         : <Button variant="ghost" size="sm" disabled={unavailable || Boolean(error)} onClick={() => setConfirmRemove(person.accountId)}>Remove</Button>}
     </li>)}</ul> : reviewers && !loading ? <p>No reviewer accounts have been appointed yet. Owners and stewards retain their existing review permissions.</p> : null}
     {reviewers?.reviewers.length === 100 ? <p className="field-hint">Showing the first 100 reviewer accounts.</p> : null}
-    <Link className="inline-link" to="/?project=circle-packing&tab=updates">Open circle-packing research →</Link>
+    <Link className="inline-link" to={`${projectLink(slug)}&tab=updates`}>Open {slug} research →</Link>
   </div>;
 }

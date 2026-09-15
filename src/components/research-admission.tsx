@@ -7,6 +7,7 @@ import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { ReviewAgentAccess } from './review-agent-access';
 import type { ResearchAdmissionAgentAccessProjection } from '../../server/research-memory/submission-admission';
+import { accountProjectPath, projectLink, projectWords, publicProjectPath, skillPath, useProjectSlug } from '@/lib/project-slug';
 
 /** Review detail is opt-in: the journal does not fetch a new resource per card. */
 export function ResearchAdmission({ submission, own, canReview, open: controlledOpen, onOpenChange }: {
@@ -26,7 +27,8 @@ export function ResearchAdmission({ submission, own, canReview, open: controlled
 function AdmissionDetail({ submission, own, canReview }: {
   submission: SubmissionSummary; own: boolean; canReview: boolean;
 }) {
-  const status = useProjectResource<PublicResearchDeliveryAdmission>(`/api/public/projects/circle-packing/submissions/${submission.id}/research-admission`);
+  const slug = useProjectSlug();
+  const status = useProjectResource<PublicResearchDeliveryAdmission>(`${publicProjectPath(slug)}/submissions/${submission.id}/research-admission`);
   return <div className="admission-detail">
     <p>Independent review decides whether this research is useful to retain in Hypothesis.md. Retaining it does not establish that its hypothesis is true.</p>
     {status.data ? <AdmissionStatus value={status.data} /> : <p role="status">{status.error ? 'The review status is unavailable.' : 'Checking the review record…'}</p>}
@@ -54,7 +56,8 @@ function AdmissionStatus({ value }: { value: PublicResearchDeliveryAdmission }) 
 }
 
 function AdmissionReview({ submission }: { submission: SubmissionSummary }) {
-  const path = `/api/participation/submissions/${submission.id}/research-admission`;
+  const slug = useProjectSlug();
+  const path = accountProjectPath(slug, `/submissions/${submission.id}/research-admission`);
   const eligibility = useProjectResource<{ canReview: boolean; reason: string }>(`${path}/eligibility`);
   const prepare = useProjectMutation<ResearchDeliveryAdmissionPreview>();
   const review = useProjectMutation<ResearchDeliveryAdmissionDecision>();

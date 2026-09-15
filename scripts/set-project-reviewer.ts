@@ -9,13 +9,13 @@ import {
   type OperatorAccountSelector,
 } from './lib/operator-account.ts';
 
-const USAGE = 'Usage: npm run project:reviewer -- (--account-email SIGNED_UP_EMAIL | --account-id CONFIRMED_SUPABASE_USER_UUID) [--role reviewer|owner] [--apply]';
+const USAGE = 'Usage: npm run project:reviewer -- (--account-email SIGNED_UP_EMAIL | --account-id CONFIRMED_SUPABASE_USER_UUID) [--role reviewer|owner] [--project circle-packing|matmul-4x4x4] [--apply]';
 
 export type ProjectReviewerRole = 'REVIEWER' | 'OWNER';
-export type ProjectReviewerArguments = Readonly<{ selector: OperatorAccountSelector; role: ProjectReviewerRole; apply: boolean }>;
+export type ProjectReviewerArguments = Readonly<{ selector: OperatorAccountSelector; role: ProjectReviewerRole; apply: boolean; project: string }>;
 
 export function parseProjectReviewerArguments(args: readonly string[]): ProjectReviewerArguments {
-  let selector: OperatorAccountSelector | null = null; let role: ProjectReviewerRole = 'REVIEWER'; let roleSpecified = false; let apply = false;
+  let selector: OperatorAccountSelector | null = null; let role: ProjectReviewerRole = 'REVIEWER'; let roleSpecified = false; let apply = false; let project = 'circle-packing';
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if ((argument === '--account-email' || argument === '--account-id') && args[index + 1]) {
@@ -27,11 +27,15 @@ export function parseProjectReviewerArguments(args: readonly string[]): ProjectR
       if (value !== 'reviewer' && value !== 'owner') throw new Error(USAGE);
       role = value === 'reviewer' ? 'REVIEWER' : 'OWNER';
       roleSpecified = true;
+    } else if (argument === '--project' && args[index + 1]) {
+      const value = args[++index]!;
+      if (!/^[a-z0-9][a-z0-9-]{0,127}$/.test(value)) throw new Error(USAGE);
+      project = value;
     } else if (argument === '--apply' && !apply) apply = true;
     else throw new Error(USAGE);
   }
   if (!selector || apply && !roleSpecified) throw new Error(USAGE);
-  return { selector, role, apply };
+  return { selector, role, apply, project };
 }
 
 export async function setProjectReviewer(input: {
@@ -39,6 +43,7 @@ export async function setProjectReviewer(input: {
   selector: OperatorAccountSelector;
   role?: ProjectReviewerRole;
   apply?: boolean;
+  project?: string;
   env?: Readonly<Record<string, string | undefined>>;
   resolveAccount?: typeof resolveOperatorAccount;
 }): Promise<{ actorId: string; role: 'REVIEWER' | 'STEWARD' | 'OWNER'; status: 'DRY_RUN' | 'ACTIVE'; changed: boolean }> {
@@ -51,10 +56,11 @@ export async function setProjectReviewer(input: {
   try {
     await client.query('BEGIN');
     await assertOperatorAccountActive(client, account);
+    const projectSlug = input.project ?? 'circle-packing';
     const project = await client.query(
-      "SELECT id FROM motive.projects WHERE slug = 'circle-packing' AND visibility = 'PUBLIC' FOR UPDATE",
+      "SELECT id FROM motive.projects WHERE slug = $1 AND visibility = 'PUBLIC' FOR UPDATE", [projectSlug],
     );
-    if (project.rowCount !== 1) throw new Error('The public circle-packing project has not been initialized.');
+    if (project.rowCount !== 1) throw new Error(`The public ${projectSlug} project has not been initialized.`);
     const projectId = project.rows[0].id as string;
     const prior = await client.query(
       'SELECT role, revoked_at FROM motive.memberships WHERE project_id = $1 AND actor_id = $2 FOR UPDATE',
@@ -103,7 +109,7 @@ export async function main(
     process.stdout.write(`${JSON.stringify(result)}\n`);
     process.stdout.write(result.status === 'DRY_RUN'
       ? `Preview only. Repeat with --role ${parsed.role.toLowerCase()} and --apply to change project authority.\n`
-      : 'This account can now review circle-packing submissions. Reload the project page. Self-review remains denied.\n');
+      : `This account can now review ${parsed.project} submissions. Reload the project page. Self-review remains denied.\n`);
   } finally { await pool.end(); }
 }
 
