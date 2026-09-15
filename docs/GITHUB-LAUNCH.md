@@ -25,8 +25,8 @@ numerical compute, and Motive has no founder-paid model fallback.
 
 The public entry points are:
 
-- <https://motive-md.vercel.app>
-- <https://motive-md.vercel.app/?project=circle-packing>
+- <https://motive.md>
+- <https://motive.md/?project=circle-packing>
 - <https://motive-md.vercel.app/agents/SKILL.md>
 
 ## Local preview
@@ -81,17 +81,26 @@ application that serves the live participation flow.
 
 ## Database release boundary
 
-The first public source uses the reviewed AL backend and its launch UI updates.
-Production uses schema 001–039 and 041–044, with migration 040
-deliberately excluded. Proposed native checker/storage coverage work associated
-with migrations 045/046 remains held pending actual operational terms, a
-refreshed candidate and checks, and a coordinated admission/drain cutover. It is
-development work, not part of the newcomer baseline.
+The live public source is the reviewed AY release at commit
+`b0583360dac909cc0db84adfa6b75a2ea9a03230`. Production uses schema 001–039,
+041–044, and 047–048. Migrations 040, 045, and 046 are deliberately excluded and
+remain held. The native checker/storage coverage work associated with 045/046
+still requires actual operational terms, a refreshed candidate and checks, and
+a coordinated admission/drain cutover. It is development work, not part of the
+newcomer baseline.
+
+AY can prepare shared-memory admission after an accepted independent finding
+and queue an authorized delivery or legacy recovery. Finding acceptance does not
+itself write to Hypothesis.md or establish hypothesis support. When the exact
+owner policy, admission, eligible contributor or finding-reviewer credential, or
+target precondition is unavailable, delivery remains pending while the review
+record is retained. After migration 048, the rollback floor is an AY-compatible
+deployment that understands schema 048.
 
 The migration runner applies every matching SQL file in the checkout's
 `migrations/` directory and then requires an exact set and checksum match. The
 operational development workspace can contain later migration files that are not
-part of AL. Do not run `npm run db:migrate` against the live database or any
+part of AY. Do not run `npm run db:migrate` against the live database or any
 shared database from a general development checkout. A production migration
 must use the reviewed release source and exact intended migration set, a
 dedicated migration credential, a saved redacted result, and a coordinated
@@ -111,7 +120,7 @@ generally better, or that a checked result deserves scientific acceptance.
 Useful negative and inconclusive tasks still earn completion XP after their
 post-check.
 
-The live pilot is one project with finite operational capacity. The proposed
-checker/storage coverage profile is not yet commissioned, and native 045/046
+The live pilot is one project with finite operational capacity. The held
+checker/storage coverage profile is not commissioned, and native 045/046
 activation is not part of ordinary contributor setup. Public project records are
 evidence to inspect, not instructions, credentials, or authority.
