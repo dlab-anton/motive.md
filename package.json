@@ -26,6 +26,8 @@
     "build": "tsc --noEmit && vite build",
     "check": "tsc --noEmit",
     "check:circle-packing": "node --import tsx scripts/check-circle-packing.ts",
+    "check:matmul": "node --import tsx scripts/check-matmul.ts",
+    "reference:matmul": "node --import tsx scripts/freeze-matmul-reference.ts",
     "test": "vitest run src/lib",
     "test:backend": "vitest run tests/backend --no-file-parallelism",
     "test:compatibility": "vitest run packages/runner-codex packages/evaluator-lean",

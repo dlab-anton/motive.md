@@ -19,6 +19,24 @@ The [upstream MIT notice](LICENSES/discovery-loop-MIT.txt) is included here.
 The frozen evidence has not been rewritten to imply that this license review
 happened earlier.
 
+## Matrix multiplication reference and fixtures
+
+The `matmul-4x4x4` reference scheme is constructed from Volker Strassen's 1969
+algorithm applied recursively; no third-party bytes are copied into it.
+[The provenance record](public/projects/matmul-4x4x4/reference-provenance.json)
+records the construction, the frozen witness hash and the cross-check.
+
+The cross-check and the checker test fixtures under `fixtures/matmul/upstream/`
+are byte-identical copies of scheme files from
+[dronperminov/FastMatrixMultiplication](https://github.com/dronperminov/FastMatrixMultiplication)
+at commit `db560ca5811bc38d5a6d5c0a3ec4315937ceabce`, MIT license, copyright 2025
+Andrew Perminov. The [upstream MIT notice](LICENSES/FastMatrixMultiplication-MIT.txt)
+is included here and the per-file hashes are listed in
+[fixtures/matmul/README.md](fixtures/matmul/README.md). Two of those files
+re-encode factorizations published by DeepMind's AlphaTensor project (Apache 2.0
+code, CC-BY 4.0 materials). Sedoglavic's catalogue at fmm.univ-lille.fr is cited
+as context only; none of its files are redistributed.
+
 ## Interface assets and dependencies
 
 Geist is supplied through `@fontsource-variable/geist` under its included font

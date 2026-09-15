@@ -1,0 +1,84 @@
+{
+  "format": "motive.matmul.reference-provenance.v1",
+  "project": "matmul-4x4x4",
+  "shape": [
+    4,
+    4,
+    4
+  ],
+  "ring": "Z",
+  "frozen_at": "2026-09-15T15:33:36Z",
+  "attribution": "Volker Strassen, \"Gaussian elimination is not optimal\", Numerische Mathematik 13 (1969), applied recursively to 2×2 blocks.",
+  "construction": {
+    "method": "Kronecker product of the 7-product Strassen scheme with itself, built by scripts/freeze-matmul-reference.ts; no upstream bytes are copied into the witness.",
+    "rank": 49,
+    "coefficient_class": "ternary"
+  },
+  "witness": {
+    "format": "motive.matmul.witness.v1",
+    "path": "public/projects/matmul-4x4x4/reference-witness.json",
+    "sha256": "f1e033dc772abbfa0546cc8eeb04ae92c4de2358ee29ff9a653cf32fec3cd260",
+    "index_convention": "u[p][i*b+j] ↔ A[i][j]; v[p][j*c+k] ↔ B[j][k]; w[p][k*a+i] ↔ C[i][k]; verified against seven published schemes on 2026-09-15."
+  },
+  "cross_check": {
+    "repository": "https://github.com/dronperminov/FastMatrixMultiplication",
+    "commit": "db560ca5811bc38d5a6d5c0a3ec4315937ceabce",
+    "path": "schemes/results/ZT/4x4x4_m49_ZT.json",
+    "fixture": "fixtures/matmul/upstream/results_ZT-4x4x4_m49_ZT.json",
+    "license": "MIT (LICENSES/FastMatrixMultiplication-MIT.txt)",
+    "raw_sha256": "8b3d86d816f70f34b4dc47437ff1a724ebec67302dc91edc8805aae0d9789f33",
+    "rank": 49,
+    "coefficient_class": "ternary",
+    "result": "An independently published 49-product integer scheme passes the same exact check; it is not the frozen reference."
+  },
+  "benchmark_context": {
+    "ring_note": "Best known rank depends on the coefficient ring. This project pins integer coefficients.",
+    "perminov_table": {
+      "url": "https://github.com/dronperminov/FastMatrixMultiplication",
+      "pushed_at": "2026-09-05",
+      "ternary": 49,
+      "integer": 49,
+      "rational": 48
+    },
+    "lille_digest": {
+      "url": "https://github.com/sedoglavic/fmm_digest",
+      "created_at": "2026-09-07",
+      "rank": 48,
+      "ring": "not stated"
+    },
+    "complex_48": {
+      "url": "https://arxiv.org/abs/2506.13131",
+      "note": "AlphaEvolve, June 2025; complex-valued coefficients."
+    },
+    "rational_48": {
+      "url": "https://arxiv.org/abs/2506.13242",
+      "note": "Dumas, Pernet, Sedoglavic, June 2025; needs an inverse of 2, so not valid over the integers."
+    },
+    "characteristic_2_47": {
+      "url": "https://github.com/google-deepmind/alphatensor",
+      "note": "AlphaTensor, 2022; valid only in characteristic 2."
+    },
+    "integer_48": "No integer-coefficient scheme with 48 products was found in the literature or the catalogues consulted on 2026-09-15."
+  },
+  "validator": {
+    "path": "src/lib/matmul.ts",
+    "sha256": "c7755859bab212047e4dddf10728d5fa92cfcbad24eb9a938685277003b99d51"
+  },
+  "freeze_script": {
+    "path": "scripts/freeze-matmul-reference.ts",
+    "sha256": "e907a2c3ddcad310b32cba74f71eb94eae291171e5825be9e6844cd81c698ab9"
+  },
+  "exact_local_check": {
+    "rank": 49,
+    "reference_rank": 49,
+    "coefficient_class": "ternary",
+    "max_abs_coefficient": 1,
+    "nonzero_entries": {
+      "u": 144,
+      "v": 144,
+      "w": 144
+    },
+    "tensor_entries_checked": 4096,
+    "official": false
+  }
+}

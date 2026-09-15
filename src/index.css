@@ -642,6 +642,24 @@ a:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-ra
 .reference-arrangement figcaption span { font-size:11px; color:var(--muted-foreground); }
 .reference-arrangement figcaption small { font-size:10px; color:var(--muted-foreground); line-height:1.6; margin-top:5px; }
 .arrangement-placeholder { display:grid; place-items:center; aspect-ratio:1; border:1px solid var(--border); padding:20px; text-align:center; font-size:12px; color:var(--muted-foreground); }
+.scheme-figure { shape-rendering:crispEdges; }
+.scheme-block { fill:white; stroke:color-mix(in srgb,var(--border) 70%,white); stroke-width:.15; }
+.scheme-cell-positive { fill:color-mix(in srgb,var(--primary) 70%,white); }
+.scheme-cell-negative { fill:color-mix(in srgb,var(--destructive) 55%,white); }
+.scheme-preview { display:grid; gap:10px; margin:0; }
+.scheme-preview svg { width:min(100%, 580px); aspect-ratio:1; border:1px solid var(--border); background:white; }
+.scheme-preview figcaption { max-width:580px; color:var(--muted-foreground); font-size:11px; line-height:1.6; }
+.scheme-listing pre { margin-top:10px; max-height:320px; overflow:auto; padding:12px; border:1px solid var(--border); border-radius:8px; background:var(--muted); font-size:11px; line-height:1.6; }
+.project-context-table { width:100%; margin:6px 0 14px; border-collapse:collapse; font-size:12px; }
+.project-context-table caption { text-align:left; font-size:11px; color:var(--muted-foreground); padding-bottom:8px; }
+.project-context-table th, .project-context-table td { text-align:left; padding:7px 10px 7px 0; border-bottom:1px solid var(--border); vertical-align:top; }
+.project-context-table th { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted-foreground); font-weight:550; }
+.project-preparation { display:grid; gap:10px; padding:18px; border:1px solid var(--border); border-radius:10px; font-size:13px; }
+.project-preparation h2 { font-size:18px; margin:0; }
+.project-preparation p { margin:0; color:var(--muted-foreground); line-height:1.6; }
+.project-preparation-next { display:grid; gap:3px; }
+.project-preparation-next strong { color:var(--foreground); font-size:11px; }
+.project-preparation ul { margin:4px 0 0; padding:0; list-style:none; display:grid; gap:6px; font-size:12px; }
 .candidate-awaiting { border:1px dashed var(--border); border-radius:10px; display:flex; flex-direction:column; justify-content:center; align-items:flex-start; padding:25px; background:color-mix(in srgb,var(--card) 35%,transparent); }
 .candidate-awaiting > svg { width:29px; height:29px; color:var(--muted-foreground); margin-bottom:22px; }
 .candidate-awaiting h3 { font-size:21px; font-weight:500; letter-spacing:-.5px; margin:8px 0 12px; line-height:1.25; }

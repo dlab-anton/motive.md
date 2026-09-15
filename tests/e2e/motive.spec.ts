@@ -10,7 +10,7 @@ test('shows one real public project without legacy balances or sample activity',
 
   await page.goto('/');
   await expect(page).toHaveTitle(/motive\.md/);
-  await expect(page.locator('[data-project]')).toHaveCount(1);
+  await expect(page.locator('[data-project]')).toHaveCount(2);
   const project = page.locator('[data-project="circle-packing"]');
   await expect(project).toContainText('Find a better circle packing');
   await expect(project).toContainText('Open for contributions');
@@ -35,6 +35,47 @@ test('shows one real public project without legacy balances or sample activity',
   await expect(page.getByRole('tabpanel')).toContainText('The paper prints 5.289154');
 
   await page.setViewportSize({ width: 320, height: 568 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('lists the matrix multiplication project in preparation with its reference and exact checker', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  const card = page.locator('[data-project="matmul-4x4x4"]');
+  await expect(card).toContainText('Multiply 4×4 matrices in fewer than 49 products');
+  await expect(card).toContainText('In preparation');
+  await expect(card).toContainText('not yet open for agents');
+  await expect(card).not.toContainText('active assignments');
+
+  await page.getByRole('link', { name: 'Explore Multiply 4×4 matrices in fewer than 49 products' }).click();
+  await expect(page.getByRole('heading', { name: 'Multiply 4×4 matrices in fewer than 49 products', level: 1 })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'The frozen reference scheme: 49 products, Strassen applied twice' })).toBeVisible();
+  await expect(page.locator('.reference-scheme')).toContainText('49');
+  await expect(page.locator('.project-preparation')).toContainText('In preparation');
+  await expect(page.locator('.project-context-table')).toContainText('rational coefficients');
+  await expect(page.locator('#contribute-agent')).toHaveCount(0);
+  await expect(page.locator('.backing-card')).toHaveCount(0);
+
+  await page.goto('/?project=matmul-4x4x4&tab=check');
+  await page.getByRole('button', { name: 'Check frozen reference' }).click();
+  const pass = page.locator('.checker-pass');
+  await expect(pass).toContainText('Valid under the local exact checker');
+  await expect(pass).toContainText('Products: 49');
+  await expect(pass).toContainText('equal to the frozen reference of 49');
+  await expect(page.getByRole('img', { name: 'Sign pattern of the checked scheme with 49 products' })).toBeVisible();
+
+  const input = page.getByLabel('JSON scheme · at most 256 KiB');
+  const rational = (await (await page.request.get('/projects/matmul-4x4x4/reference-witness.json')).text()).replace('"u":[[1,', '"u":[[2,').replace('"v":[[1,', '"v":[[0.5,');
+  await input.setInputFiles({ name: 'rational.json', mimeType: 'application/json', buffer: Buffer.from(rational) });
+  await expect(page.getByRole('button', { name: 'Check selected scheme' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Check selected scheme' }).click();
+  await expect(page.getByRole('alert')).toContainText('Scheme rejected · NONINTEGER_NUMBER');
+  await expect(page.locator('.scheme-preview')).toHaveCount(0);
+
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto('/?project=matmul-4x4x4');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });

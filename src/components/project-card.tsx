@@ -25,13 +25,13 @@ export function ProjectStats({ data }: { data: ParticipationPublicProjection | n
 }
 
 export function ProjectCard({ project, state }: { project: Project; state: SupportState }) {
-  const live = useProjectResource<ParticipationPublicProjection>('/api/public/projects/circle-packing');
+  const live = useProjectResource<ParticipationPublicProjection>(project.live ? `/api/public/projects/${project.id}` : null);
   const following = state.following.includes(project.id);
   const outcome = live.data?.challengeOutcome;
   const pending = pendingImprovement(outcome, live.data?.bestChecked);
   return <Card className="project-card" data-project={project.id}>
-    <CardHeader><div className="card-category"><span><CategoryIcon category={project.category} />{project.category}</span>{projectGoalLabel(outcome) ? <ProjectGoalBadge outcome={outcome} /> : <Badge variant="outline" className="status-badge">{following ? 'Following' : live.data?.totalSubmissions ? 'Results available' : projectLifecycleLabel(live.data)}</Badge>}</div><CardTitle className="project-title"><h2><Link to={`/?project=${project.id}`}>{project.title}</Link></h2></CardTitle><p className="project-description">{project.description}</p></CardHeader>
-    <CardContent className="project-card-content"><div className="goal-inset"><span className="eyebrow">Open challenge · N=101</span><p>{project.goal}</p></div><ProjectStats data={live.data} /></CardContent>
-    <CardFooter className="project-card-footer"><span>{live.error ? 'Live activity unavailable' : pending ? 'New best awaiting independent review' : outcome?.status === 'VERIFIED' ? 'Benchmark improvement independently reviewed' : live.data ? live.data.acceptedResults ? `${live.data.acceptedResults} accepted results` : 'No independently accepted result yet' : 'Loading activity…'}</span><Button variant="ghost" size="sm" asChild><Link to={`/?project=${project.id}`} aria-label={`Explore ${project.title}`}>Explore <ArrowUpRight /></Link></Button></CardFooter>
+    <CardHeader><div className="card-category"><span><CategoryIcon category={project.category} />{project.category}</span>{projectGoalLabel(outcome) ? <ProjectGoalBadge outcome={outcome} /> : <Badge variant="outline" className="status-badge">{following ? 'Following' : !project.live ? 'In preparation' : live.data?.totalSubmissions ? 'Results available' : projectLifecycleLabel(live.data)}</Badge>}</div><CardTitle className="project-title"><h2><Link to={`/?project=${project.id}`}>{project.title}</Link></h2></CardTitle><p className="project-description">{project.description}</p></CardHeader>
+    <CardContent className="project-card-content"><div className="goal-inset"><span className="eyebrow">{project.challenge}</span><p>{project.goal}</p></div>{project.live ? <ProjectStats data={live.data} /> : null}</CardContent>
+    <CardFooter className="project-card-footer"><span>{!project.live ? 'Reference and exact checker published · not yet open for agents' : live.error ? 'Live activity unavailable' : pending ? 'New best awaiting independent review' : outcome?.status === 'VERIFIED' ? 'Benchmark improvement independently reviewed' : live.data ? live.data.acceptedResults ? `${live.data.acceptedResults} accepted results` : 'No independently accepted result yet' : 'Loading activity…'}</span><Button variant="ghost" size="sm" asChild><Link to={`/?project=${project.id}`} aria-label={`Explore ${project.title}`}>Explore <ArrowUpRight /></Link></Button></CardFooter>
   </Card>;
 }

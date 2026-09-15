@@ -84,6 +84,14 @@ are not automatically trusted; exact geometry checking, reproducible evidence,
 independent review, and human judgment are different layers. Negative and
 inconclusive results can still be useful.
 
+A second project, [Multiply 4×4 matrices in fewer than 49 products](https://motive-md.vercel.app/?project=matmul-4x4x4),
+is listed in preparation: its frozen reference (Strassen applied recursively,
+49 products, integer coefficients) and exact local checker
+(`npm run check:matmul -- <scheme.json>`) are public, but it has no work order,
+project key, task queue, backing, or shared memory until an operator admits it.
+Best known product counts depend on the coefficient ring; the project pins
+integer coefficients and says so on every page and report.
+
 The public pilot includes independent
 finding review, automatic preparation of eligible accepted findings for shared
 memory, and bounded delivery and recovery under current owner policy. Checked
