@@ -221,6 +221,7 @@ a:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-ra
 .how-steps { display: grid; align-content: start; gap: 22px; padding-top: 8px; }
 .project-goal { margin: 16px 0; }
 .project-goal-badge { gap: 6px; white-space: normal; line-height: 1.4; color: var(--foreground); }
+.project-goal-badge.is-verified { background: #166534; border-color: #166534; color: #fff; padding: 5px 10px; font-weight: 650; }
 .project-goal-badge svg { width: 14px; height: 14px; flex-shrink: 0; }
 .project-goal > p { margin: 9px 0 6px; max-width: 650px; font-size: 13px; color: var(--muted-foreground); }
 .project-goal-links { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; overflow-wrap: anywhere; }

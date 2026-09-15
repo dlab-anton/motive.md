@@ -15,7 +15,7 @@ export function ProjectGoalBadge({ outcome }: { outcome: Outcome }) {
   const label = projectGoalLabel(outcome);
   if (!label) return null;
   const Icon = outcome?.status === 'VERIFIED' ? CheckCircle2 : ScanSearch;
-  return <Badge variant="outline" className="project-goal-badge"><Icon aria-hidden="true" />{label}</Badge>;
+  return <Badge variant="outline" className={`project-goal-badge${outcome?.status === 'VERIFIED' ? ' is-verified' : ''}`}><Icon aria-hidden="true" />{label}</Badge>;
 }
 
 export function ProjectGoal({ outcome, bestChecked }: { outcome: Outcome; bestChecked?: SubmissionSummary | null }) {
