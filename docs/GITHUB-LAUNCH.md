@@ -86,8 +86,10 @@ application that serves the live participation flow.
 
 The memory-recovery rollout (AY, commit
 `b0583360dac909cc0db84adfa6b75a2ea9a03230`) established schema 001–039,
-041–044, and 047–048. Migrations 040, 045, and 046 are deliberately excluded and
-remain held. The native checker/storage coverage work associated with 045/046
+041–044, and 047–048; the matrix-multiplication admission added 049, which only
+widens the retained witness-format constraint so the second project's schemes
+sit beside circle-packing witnesses. Migrations 040, 045, and 046 are
+deliberately excluded and remain held. The native checker/storage coverage work associated with 045/046
 still requires actual operational terms, a refreshed candidate and checks, and
 a coordinated admission/drain cutover. It is development work, not part of the
 newcomer baseline.
