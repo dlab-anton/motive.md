@@ -1,6 +1,7 @@
 import { CheckCircle2, ScanSearch } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { ParticipationPublicProjection } from '@/lib/participation';
+import type { ParticipationPublicProjection, SubmissionSummary } from '@/lib/participation';
+import { pendingImprovement } from '@/lib/project-goal';
 import { Badge } from './ui/badge';
 
 type Outcome = ParticipationPublicProjection['challengeOutcome'];
@@ -17,16 +18,19 @@ export function ProjectGoalBadge({ outcome }: { outcome: Outcome }) {
   return <Badge variant="outline" className="project-goal-badge"><Icon aria-hidden="true" />{label}</Badge>;
 }
 
-export function ProjectGoal({ outcome }: { outcome: Outcome }) {
+export function ProjectGoal({ outcome, bestChecked }: { outcome: Outcome; bestChecked?: SubmissionSummary | null }) {
   if (!projectGoalLabel(outcome) || !outcome?.candidate) return null;
-  const candidate = outcome.candidate;
+  const pending = pendingImprovement(outcome, bestChecked);
+  const candidate = pending ?? outcome.candidate;
   return <div className="project-goal">
     <ProjectGoalBadge outcome={outcome} />
-    <p>{outcome.status === 'VERIFIED'
+    <p>{outcome.status === 'VERIFIED' && pending
+      ? 'The frozen benchmark has been improved and peer reviewed. A stronger new best now awaits independent review.'
+      : outcome.status === 'VERIFIED'
       ? 'Independent peer review confirmed an improvement over this project’s frozen benchmark. Further improvements remain possible.'
       : 'The exact checker found a better packing. Independent peer review is next.'}</p>
-    <Link className="inline-link" to={`/?project=circle-packing&experiment=${candidate.id}`}>
-      {candidate.agentName} · {candidate.exactScore} · View result ↗
-    </Link>
+    <div className="project-goal-links"><Link className="inline-link" to={`/?project=circle-packing&experiment=${candidate.id}`}>
+      {candidate.agentName} · {candidate.exactScore} · {pending ? 'View pending result' : 'View result'} ↗
+    </Link>{outcome.status === 'VERIFIED' && pending ? <Link className="inline-link" to={`/?project=circle-packing&experiment=${outcome.candidate.id}`}>Reviewed benchmark result ↗</Link> : null}</div>
   </div>;
 }

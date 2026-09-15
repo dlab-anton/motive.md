@@ -15,6 +15,7 @@ import { researchDigest, researchQuestionExcerpt } from '@/lib/research-digest';
 import { ResearchTaskRecord } from './research-task-record';
 import { QueueNext, TaskAgent, TaskStatusIcon, TaskTime, useMinuteClock } from './task-row-parts';
 import { completedChronologicalPrefix, mergeChronologicalTasks } from '@/lib/task-list';
+import { pendingImprovement } from '@/lib/project-goal';
 
 export function FollowProject({ project, controls }: { project: Project; controls: SupportControls }) {
   const following = controls.state.following.includes(project.id);
@@ -62,7 +63,9 @@ function JournalEntries({ data, me, onlyMine, accountId }: { data: Participation
   const location = useLocation();
   const now = useMinuteClock();
   const challenge = !onlyMine ? data?.challengeOutcome : null;
-  const pinned = challenge && challenge.status !== 'OPEN' ? challenge.candidate : null;
+  const pendingCandidate = pendingImprovement(challenge ?? undefined, data?.bestChecked);
+  const pinned = pendingCandidate ?? (challenge && challenge.status !== 'OPEN' ? challenge.candidate : null);
+  const pinnedVerified = !pendingCandidate && challenge?.status === 'VERIFIED';
   const lastScrolled = useRef('');
   const ownPage = useProjectResource<ResearchJournalPage>(onlyMine ? '/api/participation/research-updates' : null);
   const [history, setHistory] = useState<ResearchJournalEntry[] | null>(null);
@@ -174,8 +177,8 @@ function JournalEntries({ data, me, onlyMine, accountId }: { data: Participation
     <div className="research-stories" id={active.length ? 'active-research' : undefined} aria-label="Project tasks">
       {pinned ? <a className="experiment-row task-row task-row-link task-priority" href={`/?project=circle-packing&experiment=${pinned.id}`}>
         <TaskAgent name={pinned.agentName} />
-        <span className="task-main"><strong className="task-title">{challenge?.status === 'VERIFIED' ? 'Goal met · Independently reviewed improvement' : 'Priority review · Better packing found'}</strong><span className="task-note">{pinned.exactScore} · Above the frozen benchmark</span></span>
-        <span className="task-status task-status-icon" role="img" aria-label={challenge?.status === 'VERIFIED' ? 'Goal met' : 'Awaiting independent review'} title={challenge?.status === 'VERIFIED' ? 'Goal met' : 'Awaiting independent review'}>{challenge?.status === 'VERIFIED' ? <CheckCircle2 aria-hidden="true" /> : <ScanSearch aria-hidden="true" />}</span>
+        <span className="task-main"><strong className="task-title">{pinnedVerified ? 'Goal met · Independently reviewed improvement' : 'Priority review · Better packing found'}</strong><span className="task-note">{pinned.exactScore} · Above the frozen benchmark</span></span>
+        <span className="task-status task-status-icon" role="img" aria-label={pinnedVerified ? 'Goal met' : 'Awaiting independent review'} title={pinnedVerified ? 'Goal met' : 'Awaiting independent review'}>{pinnedVerified ? <CheckCircle2 aria-hidden="true" /> : <ScanSearch aria-hidden="true" />}</span>
         <TaskTime value={pinned.createdAt} now={now} />
       </a> : null}
       {active.map(intent => <details key={intent.claimId} className="current-research-question task-row"><summary><TaskAgent name={intent.agentName} /><span className="task-main"><strong className="task-title" title={intent.proposal}>{researchQuestionExcerpt(intent.proposal)}</strong></span><TaskStatusIcon kind="in-progress" /><TaskTime value={intent.declaredAt} now={now} /></summary><div className="task-row-detail"><h3>{intent.proposal}</h3><p><strong>Expected:</strong> {intent.expectation}</p><ul>{intent.conditions.map((condition,index)=><li key={index}>{condition}</li>)}</ul><QueueNext /></div></details>)}
