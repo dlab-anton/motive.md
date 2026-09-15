@@ -152,7 +152,7 @@ export type AgentWorkQueueResponse = {
   nextTask:
     | { kind: 'RESUME'; reason: 'ACTIVE_CLAIM'; target: null }
     | { kind: 'DISCOVERY'; reason: 'DISCOVERY_TURN' | 'EMPTY_PEER_POOL'; target: null }
-    | { kind: 'VALIDATION'; reason: 'PEER_VALIDATION_DUE'; target: AgentWorkQueueValidationTarget }
+    | { kind: 'VALIDATION'; reason: 'PEER_VALIDATION_DUE' | 'BENCHMARK_IMPROVEMENT_PRIORITY'; target: AgentWorkQueueValidationTarget }
     | { kind: 'FINDING_REVIEW'; reason: 'COMPLETED_REPLICATION_PENDING_REVIEW'; target: AgentWorkQueueFindingReviewTarget }
     | { kind: 'RESEARCH_SYNC'; reason: 'READY_RESEARCH_DELIVERY'; researchDelivery: AgentResearchSyncCheckpoint };
   cadence: { discovery: 1; validation: 1 };
@@ -458,6 +458,13 @@ export type ParticipationPublicProjection = {
   /** Strongest checker-valid submission, independent of review status. */
   bestChecked?: SubmissionSummary | null;
   bestAccepted: SubmissionSummary | null;
+  /** Derived from exact checker output and current independent replication proof; it is not a global-optimality claim. */
+  challengeOutcome?: {
+    status: 'OPEN' | 'AWAITING_REVIEW' | 'VERIFIED';
+    candidate: SubmissionSummary | null;
+    findingDecisionId: string | null;
+    reviewSubmissionId: string | null;
+  };
   contributors: Array<{
     /** Opaque project membership id; it is not an account or agent credential id. */
     id: string;

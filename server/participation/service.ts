@@ -15,6 +15,7 @@ import {
   type AgentSessionProjection,
   type SetAgentSessionInput,
   type AgentWorkQueueResponse,
+  type AgentWorkQueueValidationTarget,
   type AgentTokenProjection,
   type AssignmentIntentProjection,
   type AssignmentProjection,
@@ -87,6 +88,75 @@ const LATEST_SUBMISSION_ADMISSION_CTES = `delivery_tails AS (
   ), latest_submission_decision AS (
     SELECT DISTINCT ON (source_submission_id) source_submission_id,decision,created_at,id,rationale
     FROM delivery_tails ORDER BY source_submission_id,created_at DESC,id DESC
+  )`;
+const DURABLE_VERIFIED_IMPROVEMENTS_CTE=`durable_verified_improvements AS (
+    SELECT source_artifact.project_id,source_artifact.submission_id,source_artifact.exact_score,
+      finding.id AS finding_decision_id,finding.review_submission_id
+    FROM motive.participation_submission_artifacts source_artifact
+    JOIN motive.submissions source_submission ON source_submission.id=source_artifact.submission_id
+      AND source_submission.project_id=source_artifact.project_id AND source_submission.origin='EXTERNAL'
+      AND jsonb_typeof(source_submission.provenance->'investigation')='object'
+    JOIN motive.participation_agent_tokens source_token ON source_token.id=source_artifact.agent_token_id
+      AND source_token.project_id=source_artifact.project_id
+    JOIN motive.participation_claim_completions source_completion
+      ON source_completion.submission_id=source_submission.id AND source_completion.claim_id=source_submission.claim_id
+    JOIN motive.participation_post_check_assessments source_post ON source_post.submission_id=source_submission.id
+      AND source_post.project_id=source_submission.project_id AND source_post.agent_token_id=source_artifact.agent_token_id
+      AND source_post.report_digest=source_artifact.report_digest
+    JOIN motive.participation_submission_reproducibility source_repro ON source_repro.submission_id=source_submission.id
+      AND source_repro.project_id=source_submission.project_id AND source_repro.agent_token_id=source_artifact.agent_token_id
+      AND source_repro.report_digest=source_artifact.report_digest
+    JOIN motive.finding_review_decisions finding ON finding.project_id=source_artifact.project_id
+      AND finding.source_submission_id=source_artifact.submission_id
+    JOIN motive.submissions review_submission ON review_submission.id=finding.review_submission_id
+      AND review_submission.project_id=finding.project_id AND review_submission.origin='EXTERNAL'
+    JOIN motive.work_claims review_claim ON review_claim.id=review_submission.claim_id
+      AND review_claim.project_id=review_submission.project_id AND review_claim.work_order_id=review_submission.work_order_id
+      AND review_claim.lease_epoch=review_submission.lease_epoch
+    JOIN motive.participation_submission_artifacts review_artifact ON review_artifact.submission_id=review_submission.id
+      AND review_artifact.project_id=review_submission.project_id AND review_artifact.agent_token_id=finding.reviewer_agent_token_id
+    JOIN motive.participation_agent_tokens review_token ON review_token.id=review_artifact.agent_token_id
+      AND review_token.project_id=review_artifact.project_id AND review_token.owner_actor_id=finding.reviewer_actor_id
+    JOIN motive.participation_claim_completions review_completion
+      ON review_completion.submission_id=review_submission.id AND review_completion.claim_id=review_claim.id
+    JOIN motive.participation_post_check_assessments review_post ON review_post.submission_id=review_submission.id
+      AND review_post.project_id=review_submission.project_id AND review_post.agent_token_id=review_artifact.agent_token_id
+      AND review_post.report_digest=review_artifact.report_digest
+    JOIN motive.participation_submission_reproducibility review_repro ON review_repro.submission_id=review_submission.id
+      AND review_repro.project_id=review_submission.project_id AND review_repro.agent_token_id=review_artifact.agent_token_id
+      AND review_repro.report_digest=review_artifact.report_digest
+    JOIN motive.participation_claim_intents review_intent ON review_intent.claim_id=review_claim.id
+      AND review_intent.project_id=review_submission.project_id AND review_intent.work_order_id=review_submission.work_order_id
+      AND review_intent.work_order_revision=review_submission.work_order_revision
+      AND review_intent.work_order_terms_digest=review_claim.terms_digest
+      AND review_intent.lease_epoch=review_claim.lease_epoch AND review_intent.agent_token_id=review_artifact.agent_token_id
+    WHERE source_artifact.report='VALID' AND source_artifact.exceeds_reference=TRUE
+      AND review_artifact.report='VALID' AND review_artifact.exceeds_reference=TRUE
+      AND review_submission.operator_actor_id='agent:'||review_token.id::text
+      AND source_token.owner_actor_id<>review_token.owner_actor_id
+      AND finding.decision='ACCEPT' AND finding.outcome='SUPPORTED'
+      AND finding.reviewer_agent_token_id IS NOT NULL AND finding.review_submission_id IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM motive.finding_review_decisions successor
+        WHERE successor.previous_decision_id=finding.id)
+      AND finding.review_package->>'format' IN ('motive.finding-review-package/0.2','motive.finding-review-package/0.3')
+      AND finding.review_package->>'findingId'=source_submission.id::text
+      AND finding.review_package#>>'{project,id}'=source_submission.project_id::text
+      AND finding.review_package#>>'{source,submission,id}'=source_submission.id::text
+      AND finding.review_package#>>'{source,artifact,digest}'=source_artifact.witness_digest
+      AND finding.review_package#>>'{source,report,digest}'=source_artifact.report_digest
+      AND finding.review_package#>>'{source,report,status}'=source_artifact.report::text
+      AND finding.review_package#>'{source,report,body}'=source_artifact.report_body
+      AND finding.review_package_digest='sha256:'||encode(sha256(convert_to(
+        motive.finding_review_canonical_json(finding.review_package),'UTF8')),'hex')
+      AND review_intent.experiment_protocol->>'format'='motive.experiment-protocol.v1'
+      AND review_intent.experiment_protocol->>'purpose'='REPLICATION'
+      AND (SELECT count(*) FROM jsonb_array_elements(review_intent.experiment_protocol->'inputs') entry
+        WHERE entry->>'name'='review_target_submission_id'
+          AND entry->>'value'=source_submission.id::text)=1
+      AND EXISTS(SELECT 1 FROM jsonb_array_elements(review_intent.motive_references) reference
+        WHERE reference->>'submissionId'=source_submission.id::text
+          AND reference->>'reportDigest'=source_artifact.report_digest
+          AND reference->>'artifactDigest'=source_artifact.witness_digest)
   )`;
 const CONNECTION_ADJECTIVES = ['Bright', 'Calm', 'Clear', 'Clever', 'Curious', 'Gentle', 'Keen', 'Lively',
   'Nimble', 'Patient', 'Quiet', 'Steady', 'Thoughtful', 'Vivid', 'Warm', 'Wise'] as const;
@@ -787,6 +857,55 @@ export class ParticipationService {
       projectId: text(token, 'project_id'), expiresAt: dateText(token.expires_at) });
   }
 
+  private async validationCandidate(client:PoolClient,context:ParticipationAgentContext,
+    benchmarkImprovementOnly:boolean):Promise<AgentWorkQueueValidationTarget|null>{
+    const candidates = await client.query(`WITH ${DURABLE_VERIFIED_IMPROVEMENTS_CTE}
+      SELECT submission.id,submission.work_order_id,
+        true AS has_investigation,true AS has_post_check_assessment,true AS has_reproducibility,
+        artifact.agent_token_id,artifact.contributor_display_name,token.agent_name,token.model_name,
+        submission.created_at,artifact.report,artifact.report_digest,artifact.witness_digest,artifact.exact_score,
+        artifact.exceeds_reference,review.decision
+      FROM motive.submissions submission
+      JOIN motive.participation_submission_artifacts artifact ON artifact.submission_id=submission.id
+        AND artifact.project_id=submission.project_id
+      JOIN motive.participation_agent_tokens token ON token.id=artifact.agent_token_id
+        AND token.project_id=submission.project_id
+      JOIN motive.participation_claim_completions completion ON completion.claim_id=submission.claim_id
+        AND completion.submission_id=submission.id
+      JOIN motive.participation_post_check_assessments assessment ON assessment.submission_id=submission.id
+        AND assessment.project_id=submission.project_id AND assessment.report_digest=artifact.report_digest
+      JOIN motive.participation_submission_reproducibility reproducibility ON reproducibility.submission_id=submission.id
+        AND reproducibility.project_id=submission.project_id AND reproducibility.report_digest=artifact.report_digest
+      LEFT JOIN motive.participation_submission_reviews review ON review.submission_id=submission.id
+      WHERE submission.project_id=$1 AND submission.origin='EXTERNAL'
+        AND token.owner_actor_id<>$2
+        AND jsonb_typeof(submission.provenance->'investigation')='object'
+        AND (NOT $3::boolean OR (artifact.report='VALID' AND artifact.exceeds_reference=TRUE))
+        AND NOT EXISTS (SELECT 1 FROM motive.finding_review_decisions legacy
+          WHERE legacy.source_submission_id=submission.id
+            AND legacy.review_package->>'format'='motive.finding-review-package/0.1')
+        AND (NOT $3::boolean OR NOT EXISTS(SELECT 1 FROM durable_verified_improvements verified
+          WHERE verified.project_id=submission.project_id AND verified.submission_id=submission.id))
+        AND (NOT $3::boolean
+          OR NOT EXISTS(SELECT 1 FROM durable_verified_improvements verified
+            WHERE verified.project_id=submission.project_id)
+          OR artifact.exact_score::numeric>(SELECT max(verified.exact_score::numeric)
+            FROM durable_verified_improvements verified WHERE verified.project_id=submission.project_id))
+        AND NOT EXISTS (
+          SELECT 1 FROM motive.participation_claim_intents cited_intent
+          JOIN motive.participation_agent_tokens cited_token ON cited_token.id=cited_intent.agent_token_id
+          JOIN motive.participation_claim_completions cited_completion ON cited_completion.claim_id=cited_intent.claim_id
+          WHERE cited_intent.project_id=$1 AND cited_token.owner_actor_id=$2
+            AND motive.valid_agent_finding_review_proof($2,cited_token.id,
+              cited_completion.submission_id,submission.id,$1))
+      ORDER BY CASE WHEN $3::boolean THEN artifact.exact_score::numeric END DESC NULLS LAST,
+        submission.created_at ASC,submission.id ASC LIMIT 1`,
+    [context.projectId,context.ownerActorId,benchmarkImprovementOnly]);
+    if(!candidates.rowCount)return null;const row=candidates.rows[0];
+    return{submission:this.submissionSummary(row),reference:{submissionId:text(row,'id'),
+      reportDigest:text(row,'report_digest'),artifactDigest:text(row,'witness_digest')}};
+  }
+
   async agentWorkQueue(context: ParticipationAgentContext): Promise<AgentWorkQueueResponse> {
     const queued = await this.transaction(async client => {
       const token = await this.tokenForUpdate(client, context);
@@ -829,6 +948,10 @@ export class ParticipationService {
           reviewSubmissionId,targetSubmissionId,previewHref:`${base}/preview`,decisionHref:`${base}/decisions`}});
       }
 
+      const priorityImprovement=await this.validationCandidate(client,context,true);
+      if(priorityImprovement)return response({kind:'VALIDATION',reason:'BENCHMARK_IMPROVEMENT_PRIORITY',
+        target:priorityImprovement});
+
       const history = await client.query(`SELECT
           count(*)::integer AS completed_attempts,
           (SELECT coalesce(marker.target_submission_id IS NOT NULL
@@ -859,45 +982,11 @@ export class ParticipationService {
         return response({ kind: 'DISCOVERY', reason: 'DISCOVERY_TURN', target: null });
       }
 
-      const candidates = await client.query(`SELECT submission.id,submission.work_order_id,
-          true AS has_investigation,true AS has_post_check_assessment,true AS has_reproducibility,
-          artifact.agent_token_id,artifact.contributor_display_name,token.agent_name,token.model_name,
-          submission.created_at,artifact.report,artifact.report_digest,artifact.witness_digest,artifact.exact_score,
-          artifact.exceeds_reference,review.decision
-        FROM motive.submissions submission
-        JOIN motive.participation_submission_artifacts artifact ON artifact.submission_id=submission.id
-          AND artifact.project_id=submission.project_id
-        JOIN motive.participation_agent_tokens token ON token.id=artifact.agent_token_id
-          AND token.project_id=submission.project_id
-        JOIN motive.participation_claim_completions completion ON completion.claim_id=submission.claim_id
-          AND completion.submission_id=submission.id
-        JOIN motive.participation_post_check_assessments assessment ON assessment.submission_id=submission.id
-          AND assessment.project_id=submission.project_id AND assessment.report_digest=artifact.report_digest
-        JOIN motive.participation_submission_reproducibility reproducibility ON reproducibility.submission_id=submission.id
-          AND reproducibility.project_id=submission.project_id AND reproducibility.report_digest=artifact.report_digest
-        LEFT JOIN motive.participation_submission_reviews review ON review.submission_id=submission.id
-        WHERE submission.project_id=$1 AND submission.origin='EXTERNAL'
-          AND token.owner_actor_id<>$2
-          AND jsonb_typeof(submission.provenance->'investigation')='object'
-          AND NOT EXISTS (SELECT 1 FROM motive.finding_review_decisions legacy
-            WHERE legacy.source_submission_id=submission.id
-              AND legacy.review_package->>'format'='motive.finding-review-package/0.1')
-          AND NOT EXISTS (
-            SELECT 1 FROM motive.participation_claim_intents cited_intent
-            JOIN motive.participation_agent_tokens cited_token ON cited_token.id=cited_intent.agent_token_id
-            JOIN motive.participation_claim_completions cited_completion ON cited_completion.claim_id=cited_intent.claim_id
-            WHERE cited_intent.project_id=$1 AND cited_token.owner_actor_id=$2
-              AND motive.valid_agent_finding_review_proof($2,cited_token.id,
-                cited_completion.submission_id,submission.id,$1))
-        ORDER BY submission.created_at ASC,submission.id ASC LIMIT 1`, [context.projectId, context.ownerActorId]);
-      if (!candidates.rowCount) {
+      const candidate=await this.validationCandidate(client,context,false);
+      if (!candidate) {
         return response({ kind: 'DISCOVERY', reason: 'EMPTY_PEER_POOL', target: null });
       }
-      const row = candidates.rows[0];
-      return response({ kind: 'VALIDATION', reason: 'PEER_VALIDATION_DUE', target: {
-        submission: this.submissionSummary(row), reference: { submissionId: text(row, 'id'),
-          reportDigest: text(row, 'report_digest'), artifactDigest: text(row, 'witness_digest') },
-      } });
+      return response({ kind: 'VALIDATION', reason: 'PEER_VALIDATION_DUE', target: candidate });
     });
     if (queued.nextTask.kind === 'RESUME' || queued.nextTask.kind === 'FINDING_REVIEW') return queued;
     const recovered = await this.options.nextReadyRecoveredFinding?.(context);
@@ -1485,6 +1574,24 @@ export class ParticipationService {
         ? `/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/${row.id}/post-check-assessment` : null,
       reproducibilityHref: row.has_reproducibility
         ? `/api/public/projects/${PARTICIPATION_PROJECT_SLUG}/submissions/${row.id}/reproducibility` : null };
+  }
+
+  private async challengeOutcome(client:PoolClient,projectId:string):Promise<NonNullable<ParticipationPublicProjection['challengeOutcome']>>{
+    const verified=await client.query(`WITH ${DURABLE_VERIFIED_IMPROVEMENTS_CTE}
+      SELECT finding_decision_id,review_submission_id,submission_id
+      FROM durable_verified_improvements WHERE project_id=$1
+      ORDER BY exact_score::numeric DESC,submission_id ASC LIMIT 1`,[projectId]);
+    if(verified.rowCount){const row=verified.rows[0];return{status:'VERIFIED',
+      candidate:await this.submissionById(client,text(row,'submission_id')),
+      findingDecisionId:text(row,'finding_decision_id'),reviewSubmissionId:text(row,'review_submission_id')};}
+    const awaiting=await client.query(`SELECT artifact.submission_id
+      FROM motive.participation_submission_artifacts artifact
+      WHERE artifact.project_id=$1 AND artifact.report='VALID' AND artifact.exceeds_reference=TRUE
+      ORDER BY artifact.exact_score::numeric DESC,artifact.created_at ASC,artifact.submission_id ASC LIMIT 1`,[projectId]);
+    return awaiting.rowCount?{status:'AWAITING_REVIEW',
+      candidate:await this.submissionById(client,text(awaiting.rows[0],'submission_id')),
+      findingDecisionId:null,reviewSubmissionId:null}
+      :{status:'OPEN',candidate:null,findingDecisionId:null,reviewSubmissionId:null};
   }
 
   private async credentialLoopProgress(client: PoolClient, credentialIds: string[]): Promise<ParticipationCredentialLoopProgress[]> {
@@ -2399,6 +2506,7 @@ export class ParticipationService {
       const researchUpdates = await this.publicResearchUpdates(client, projectId);
       const recentResearchHandoffs = (await this.researchHandoffs(client,projectId,
         {ownerActorId:null,before:null,eventId:null,limit:6})).items;
+      const challengeOutcome=await this.challengeOutcome(client,projectId);
       const total = Number(counts.rows[0].submissions); const active = Number(counts.rows[0].active); const accepted = Number(counts.rows[0].accepted);
       return { project: { slug: PARTICIPATION_PROJECT_SLUG, visibility: 'PUBLIC',
         lifecycle: total > 0 ? 'RESULTS_AVAILABLE' : active > 0 ? 'CONTRIBUTING' : 'NOT_STARTED', projectRevision: Number(project.rows[0].current_revision) },
@@ -2406,6 +2514,7 @@ export class ParticipationService {
         bestChecked: bestChecked.rowCount
           ? await this.submissionById(client, text(bestChecked.rows[0], 'submission_id')) : null,
         bestAccepted: best.rowCount ? await this.submissionById(client, text(best.rows[0], 'submission_id')) : null,
+        challengeOutcome,
         contributors: contributors.rows.map(row => ({ id: text(row, 'id'), displayName: text(row, 'display_name'),
           firstSubmittedAt: dateText(row.first_submitted_at), submissionCount: Number(row.submission_count),
           reviewedArtifactCount: Number(row.reviewed_artifact_count), acceptedFindingCount:Number(row.accepted_finding_count),

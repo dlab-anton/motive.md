@@ -8,6 +8,7 @@ import type { SupportState } from '@/lib/support';
 import type { ParticipationPublicProjection } from '@/lib/participation';
 import { useProjectResource } from '@/lib/project-api';
 import { projectLifecycleLabel } from './project-live';
+import { ProjectGoalBadge, projectGoalLabel } from './project-goal';
 
 const icons: Record<Category, LucideIcon> = { Math: Pi };
 export function CategoryIcon({ category }: { category: Category }) {
@@ -25,9 +26,10 @@ export function ProjectStats({ data }: { data: ParticipationPublicProjection | n
 export function ProjectCard({ project, state }: { project: Project; state: SupportState }) {
   const live = useProjectResource<ParticipationPublicProjection>('/api/public/projects/circle-packing');
   const following = state.following.includes(project.id);
+  const outcome = live.data?.challengeOutcome;
   return <Card className="project-card" data-project={project.id}>
-    <CardHeader><div className="card-category"><span><CategoryIcon category={project.category} />{project.category}</span><Badge variant="outline" className="status-badge">{following ? 'Following' : live.data?.totalSubmissions ? 'Results available' : projectLifecycleLabel(live.data)}</Badge></div><CardTitle className="project-title"><h2><Link to={`/?project=${project.id}`}>{project.title}</Link></h2></CardTitle><p className="project-description">{project.description}</p></CardHeader>
+    <CardHeader><div className="card-category"><span><CategoryIcon category={project.category} />{project.category}</span>{projectGoalLabel(outcome) ? <ProjectGoalBadge outcome={outcome} /> : <Badge variant="outline" className="status-badge">{following ? 'Following' : live.data?.totalSubmissions ? 'Results available' : projectLifecycleLabel(live.data)}</Badge>}</div><CardTitle className="project-title"><h2><Link to={`/?project=${project.id}`}>{project.title}</Link></h2></CardTitle><p className="project-description">{project.description}</p></CardHeader>
     <CardContent className="project-card-content"><div className="goal-inset"><span className="eyebrow">Open challenge · N=101</span><p>{project.goal}</p></div><ProjectStats data={live.data} /></CardContent>
-    <CardFooter className="project-card-footer"><span>{live.error ? 'Live activity unavailable' : live.data ? live.data.acceptedResults ? `${live.data.acceptedResults} accepted results` : 'No independently accepted result yet' : 'Loading activity…'}</span><Button variant="ghost" size="sm" asChild><Link to={`/?project=${project.id}`} aria-label={`Explore ${project.title}`}>Explore <ArrowUpRight /></Link></Button></CardFooter>
+    <CardFooter className="project-card-footer"><span>{live.error ? 'Live activity unavailable' : outcome?.status === 'VERIFIED' ? 'Benchmark improvement independently reviewed' : outcome?.status === 'AWAITING_REVIEW' ? 'Better packing found · peer review next' : live.data ? live.data.acceptedResults ? `${live.data.acceptedResults} accepted results` : 'No independently accepted result yet' : 'Loading activity…'}</span><Button variant="ghost" size="sm" asChild><Link to={`/?project=${project.id}`} aria-label={`Explore ${project.title}`}>Explore <ArrowUpRight /></Link></Button></CardFooter>
   </Card>;
 }

@@ -13,6 +13,7 @@ import { STATIC_PROJECT_POLL_INTERVAL_MS } from '@/lib/project-resource-policy';
 import { journalIdPattern } from '@/lib/research-journal';
 import type { ParticipationPublicProjection } from '@/lib/participation';
 import type { ResearchScopePublic } from '@/lib/research-memory';
+import { ProjectGoal } from './project-goal';
 
 export function ProjectView({ project, controls }: { project: Project; controls: SupportControls }) {
   const live = useProjectResource<ParticipationPublicProjection>('/api/public/projects/circle-packing');
@@ -38,6 +39,7 @@ export function ProjectView({ project, controls }: { project: Project; controls:
     {record ? <p className="record-project-name">{project.title}</p> : <header className="detail-heading project-pitch-heading">
       <p className="eyebrow">Open project · Math</p><h1>{project.title}</h1>
       <p>101 circles. One square. Help find a better arrangement.</p>
+      <ProjectGoal outcome={live.data?.challengeOutcome} />
       <div className="project-follow"><FollowProject project={project} controls={controls} /><a className="inline-link" href="#contribute-agent">Contribute with your agent <ArrowUpRight className="size-3.5" /></a></div>
     </header>}
     <div className="project-layout project-layout-minimal project-pitch-layout"><div className="detail-main">

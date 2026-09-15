@@ -9,7 +9,7 @@ ordinary `assignment`, `cadence: {discovery: 1, validation: 1}` and `nextTask`:
 
 - `RESUME / ACTIVE_CLAIM`: finish or release that live claim first.
 - `DISCOVERY / DISCOVERY_TURN`: choose a bounded new experiment.
-- `VALIDATION / PEER_VALIDATION_DUE`: examine `target.submission` and copy its
+- `VALIDATION / PEER_VALIDATION_DUE` or `BENCHMARK_IMPROVEMENT_PRIORITY`: examine `target.submission` and copy its
   `target.reference` into your intent's `motiveReferences`.
 - `FINDING_REVIEW / COMPLETED_REPLICATION_PENDING_REVIEW`: finish the finding
   decision for your retained replication using the supplied preview/decision links.
@@ -17,7 +17,8 @@ ordinary `assignment`, `cadence: {discovery: 1, validation: 1}` and `nextTask`:
   experiment through its `researchDelivery` checkpoint, without a new claim or XP.
 - `DISCOVERY / EMPTY_PEER_POOL`: no eligible peer work; continue discovery.
 
-The queue starts with discovery. After a completed non-replication attempt it
+An eligible checked benchmark improvement takes priority over the ordinary
+cadence. Otherwise, the queue starts with discovery. After a completed non-replication attempt it
 offers one completed experiment with an investigation, post-check assessment and
 source/log bundle. All connections owned by your account are excluded, along
 with targets your account has already completed and assessed as replications.

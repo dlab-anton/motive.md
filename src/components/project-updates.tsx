@@ -1,4 +1,4 @@
-import { Bell, BellOff, Newspaper } from 'lucide-react';
+import { Bell, BellOff, CheckCircle2, Newspaper, ScanSearch } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -61,6 +61,8 @@ type TimelineItem = { id: string; createdAt: string } & (
 function JournalEntries({ data, me, onlyMine, accountId }: { data: ParticipationPublicProjection | null; me: ParticipationMeResponse | null; onlyMine: boolean; accountId: string | null }) {
   const location = useLocation();
   const now = useMinuteClock();
+  const challenge = !onlyMine ? data?.challengeOutcome : null;
+  const pinned = challenge && challenge.status !== 'OPEN' ? challenge.candidate : null;
   const lastScrolled = useRef('');
   const ownPage = useProjectResource<ResearchJournalPage>(onlyMine ? '/api/participation/research-updates' : null);
   const [history, setHistory] = useState<ResearchJournalEntry[] | null>(null);
@@ -170,8 +172,14 @@ function JournalEntries({ data, me, onlyMine, accountId }: { data: Participation
     <div className="task-column-head" aria-hidden="true"><span>Agent</span><span>Task</span><span><span className="sr-only">Status</span></span><span>When</span></div>
     {claimSummary ? <p className="task-idle">{claimSummary}</p> : null}
     <div className="research-stories" id={active.length ? 'active-research' : undefined} aria-label="Project tasks">
+      {pinned ? <a className="experiment-row task-row task-row-link task-priority" href={`/?project=circle-packing&experiment=${pinned.id}`}>
+        <TaskAgent name={pinned.agentName} />
+        <span className="task-main"><strong className="task-title">{challenge?.status === 'VERIFIED' ? 'Goal met · Independently reviewed improvement' : 'Priority review · Better packing found'}</strong><span className="task-note">{pinned.exactScore} · Above the frozen benchmark</span></span>
+        <span className="task-status task-status-icon" role="img" aria-label={challenge?.status === 'VERIFIED' ? 'Goal met' : 'Awaiting independent review'} title={challenge?.status === 'VERIFIED' ? 'Goal met' : 'Awaiting independent review'}>{challenge?.status === 'VERIFIED' ? <CheckCircle2 aria-hidden="true" /> : <ScanSearch aria-hidden="true" />}</span>
+        <TaskTime value={pinned.createdAt} now={now} />
+      </a> : null}
       {active.map(intent => <details key={intent.claimId} className="current-research-question task-row"><summary><TaskAgent name={intent.agentName} /><span className="task-main"><strong className="task-title" title={intent.proposal}>{researchQuestionExcerpt(intent.proposal)}</strong></span><TaskStatusIcon kind="in-progress" /><TaskTime value={intent.declaredAt} now={now} /></summary><div className="task-row-detail"><h3>{intent.proposal}</h3><p><strong>Expected:</strong> {intent.expectation}</p><ul>{intent.conditions.map((condition,index)=><li key={index}>{condition}</li>)}</ul><QueueNext /></div></details>)}
-      {displayed.map(item => item.kind === 'experiment'
+      {displayed.filter(item => item.id !== pinned?.id).map(item => item.kind === 'experiment'
       ? <ExperimentRow key={item.id} entry={item.entry} now={now} />
       : <HandoffRow key={item.id} item={item.item} focused={item.id === handoffs.requestedId} now={now} />)}
     </div>

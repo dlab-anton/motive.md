@@ -81,8 +81,8 @@ application that serves the live participation flow.
 
 ## Database release boundary
 
-The live public source is the reviewed AY release at commit
-`b0583360dac909cc0db84adfa6b75a2ea9a03230`. Production uses schema 001–039,
+The memory-recovery rollout (AY, commit
+`b0583360dac909cc0db84adfa6b75a2ea9a03230`) established schema 001–039,
 041–044, and 047–048. Migrations 040, 045, and 046 are deliberately excluded and
 remain held. The native checker/storage coverage work associated with 045/046
 still requires actual operational terms, a refreshed candidate and checks, and
@@ -96,6 +96,13 @@ owner policy, admission, eligible contributor or finding-reviewer credential, or
 target precondition is unavailable, delivery remains pending while the review
 record is retained. After migration 048, the rollback floor is an AY-compatible
 deployment that understands schema 048.
+
+Benchmark status and validation priority are derived from existing records and
+require no additional migration. An exact checked improvement awaits peer
+review. The goal is met only after a current supported finding binds a completed
+independent replication whose source and review witnesses both improve the
+frozen benchmark. Ordinary reviewer-key expiry does not erase that evidence;
+a superseding finding can change the status. This is not a global-optimality claim.
 
 The migration runner applies every matching SQL file in the checkout's
 `migrations/` directory and then requires an exact set and checksum match. The

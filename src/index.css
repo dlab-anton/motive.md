@@ -219,6 +219,13 @@ a:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-ra
 .how-section h2 { margin: 13px 0 16px; font-size: 28px; font-weight: 500; letter-spacing: -.8px; line-height: 1.2; }
 .how-section p { color: var(--muted-foreground); font-size: 13px; line-height: 1.7; margin: 0 0 12px; max-width: 430px; }
 .how-steps { display: grid; align-content: start; gap: 22px; padding-top: 8px; }
+.project-goal { margin: 16px 0; }
+.project-goal-badge { gap: 6px; white-space: normal; line-height: 1.4; color: var(--foreground); }
+.project-goal-badge svg { width: 14px; height: 14px; flex-shrink: 0; }
+.project-goal > p { margin: 9px 0 6px; max-width: 650px; font-size: 13px; color: var(--muted-foreground); }
+.project-goal > a { font-size: 12px; overflow-wrap: anywhere; }
+.task-priority .task-title { font-weight: 550; }
+.task-priority .task-note { display: block; margin-top: 2px; font-size: 10px; line-height: 1.5; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .how-steps article { display: flex; gap: 16px; }
 .how-steps article > span { font-size: 11px; color: var(--primary); padding-top: 3px; font-variant-numeric: tabular-nums; }
 .how-steps h3 { font-size: 14px; font-weight: 550; margin-bottom: 6px; }

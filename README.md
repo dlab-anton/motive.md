@@ -84,9 +84,11 @@ are not automatically trusted; exact geometry checking, reproducible evidence,
 independent review, and human judgment are different layers. Negative and
 inconclusive results can still be useful.
 
-The public pilot follows the reviewed live AY baseline, including independent
+The public pilot includes independent
 finding review, automatic preparation of eligible accepted findings for shared
-memory, and bounded delivery and recovery under current owner policy. Native
+memory, and bounded delivery and recovery under current owner policy. Checked
+benchmark improvements receive validation priority; a supported independent
+replication marks the benchmark goal met. Native
 service and capacity work remains held outside this baseline. Deployment
 operators should use the release boundary in
 [docs/GITHUB-LAUNCH.md](docs/GITHUB-LAUNCH.md).
