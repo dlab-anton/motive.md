@@ -9,7 +9,7 @@ import { createParticipationService, type ParticipationService } from '../../ser
 import { resolveResearchDeliveryTarget as resolveRetainedResearchDeliveryTarget } from '../../server/research-memory/research-delivery-target.ts';
 import type { SubmissionInvestigationInput, SubmissionResearchReference } from '../../src/lib/participation.ts';
 import type { ResearchDeliveryTargetBinding, ResearchDeliveryTargetSelection } from '../../src/lib/research-delivery-target.ts';
-import type { AgentResearchDeliveryCheckpoint } from '../../src/lib/research-delivery-policy.ts';
+import type { AgentResearchDeliveryCheckpoint, RecoveredFindingCheckpoint } from '../../src/lib/research-delivery-policy.ts';
 
 const baseUrl = process.env.MOTIVE_TEST_DATABASE_URL;
 const pgDescribe = baseUrl ? describe : describe.skip;
@@ -21,7 +21,8 @@ pgDescribe('participation research delivery target on isolated PostgreSQL', () =
   const tokenSecret = 'research-delivery-target-test-secret-longer-than-thirty-two-bytes';
   let admin: Pool; let pool: Pool; let service: ParticipationService; let assignmentId: string; let witness: string;
   let resolved: ResearchDeliveryTargetSelection[]; let targetSelection: ResearchDeliveryTargetSelection;
-  let readyDelivery: AgentResearchDeliveryCheckpoint | null; let deliveryChecks: number;
+  let readyDelivery: AgentResearchDeliveryCheckpoint | null; let recoveredDelivery: RecoveredFindingCheckpoint | null;
+  let deliveryChecks: number; let recoveryChecks: number;
 
   const target = (): ResearchDeliveryTargetSelection => ({ ...targetSelection });
   const reference = (selection: ResearchDeliveryTargetSelection): SubmissionResearchReference => ({
@@ -52,7 +53,7 @@ pgDescribe('participation research delivery target on isolated PostgreSQL', () =
       Buffer.alloc(48,7),digest('f'),scopeConfigurationDigest,'1'.repeat(40),issuer]);
     await pool.query(`INSERT INTO motive.research_context_snapshots(id,scope_id,project_id,snapshot_digest,payload,api_version,retrieved_at)
       VALUES($1,$2,$3,$4,$5::jsonb,'1.8.0',clock_timestamp())`,[snapshotId,scopeId,projectId,snapshotDigest,JSON.stringify(payload)]);
-    resolved = []; readyDelivery=null; deliveryChecks=0;
+    resolved = []; readyDelivery=null; recoveredDelivery=null; deliveryChecks=0; recoveryChecks=0;
     const validateResearchReferences = async (_projectId: string, references: SubmissionResearchReference[]) => {
       if (!references.length) throw new Error('missing references');
     };
@@ -62,7 +63,9 @@ pgDescribe('participation research delivery target on isolated PostgreSQL', () =
       return resolveRetainedResearchDeliveryTarget(candidateProjectId,selection,_client);
     };
     service = createParticipationService(pool, { tokenSecret, issuerActorId: issuer, validateResearchReferences,
-      resolveResearchDeliveryTarget, nextReadyResearchDelivery:async()=>{deliveryChecks+=1;return readyDelivery;} });
+      resolveResearchDeliveryTarget,
+      nextReadyRecoveredFinding:async()=>{recoveryChecks+=1;return recoveredDelivery;},
+      nextReadyResearchDelivery:async()=>{deliveryChecks+=1;return readyDelivery;} });
     assignmentId = (await service.ensureCircleWorkOrder()).id;
   }, 30_000);
 
@@ -138,9 +141,15 @@ pgDescribe('participation research delivery target on isolated PostgreSQL', () =
       deliveryId:randomUUID(),policyId:randomUUID(),mode:'APPEND_EXISTING',
       target:stored.rows[0].binding as ResearchDeliveryTargetBinding,
       reportDigest:digest('9'),syncPath:'/api/agent/submissions/{submissionId}/research-sync',reason:'READY_FOR_SYNC'};
+    recoveredDelivery={format:'motive.agent-memory-recovery-checkpoint/0.1',status:'READY',submissionId:submitted.id,
+      findingDecisionId:randomUUID(),deliveryId:randomUUID(),policyId:randomUUID(),reportDigest:digest('7'),
+      syncPath:'/api/agent/submissions/{submissionId}/research-sync'};
+    expect((await service.agentWorkQueue(fixture.context)).nextTask).toEqual({kind:'RESEARCH_SYNC',
+      reason:'READY_RESEARCH_DELIVERY',researchDelivery:recoveredDelivery});
+    expect(recoveryChecks).toBe(1);expect(deliveryChecks).toBe(0);recoveredDelivery=null;
     expect((await service.agentWorkQueue(fixture.context)).nextTask).toEqual({kind:'RESEARCH_SYNC',
       reason:'READY_RESEARCH_DELIVERY',researchDelivery:readyDelivery});
-    expect(deliveryChecks).toBe(1);
+    expect(recoveryChecks).toBe(2);expect(deliveryChecks).toBe(1);
   }, 30_000);
 
   it('keeps legacy absence unchanged and rejects a target added only after testing', async () => {

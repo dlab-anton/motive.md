@@ -52,3 +52,16 @@ export type AgentResearchDeliveryCheckpoint = {
   reason: 'READY_FOR_SYNC' | 'ADMISSION_REQUIRED' | 'OWNER_APPROVAL_REQUIRED'
     | 'CONTRACT_UNAVAILABLE' | 'DELIVERY_UNAVAILABLE';
 };
+
+export type RecoveredFindingCheckpoint = {
+  format: 'motive.agent-memory-recovery-checkpoint/0.1';
+  status: 'READY';
+  submissionId: string;
+  findingDecisionId: string;
+  deliveryId: string;
+  policyId: string;
+  reportDigest: string;
+  syncPath: '/api/agent/submissions/{submissionId}/research-sync';
+};
+
+export type AgentResearchSyncCheckpoint = AgentResearchDeliveryCheckpoint | RecoveredFindingCheckpoint;

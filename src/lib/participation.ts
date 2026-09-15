@@ -1,7 +1,7 @@
 import type { PublicResearchSummary } from './research-summary';
 import type { ExperimentProtocol } from './experiment-protocol';
 import type { ResearchDeliveryTargetSelection } from './research-delivery-target';
-import type { AgentResearchDeliveryCheckpoint } from './research-delivery-policy';
+import type { AgentResearchSyncCheckpoint } from './research-delivery-policy';
 
 export const PARTICIPATION_PROJECT_SLUG = 'circle-packing' as const;
 export const PARTICIPATION_WITNESS_FORMAT = 'motive.csqv.witness.v1' as const;
@@ -154,7 +154,7 @@ export type AgentWorkQueueResponse = {
     | { kind: 'DISCOVERY'; reason: 'DISCOVERY_TURN' | 'EMPTY_PEER_POOL'; target: null }
     | { kind: 'VALIDATION'; reason: 'PEER_VALIDATION_DUE'; target: AgentWorkQueueValidationTarget }
     | { kind: 'FINDING_REVIEW'; reason: 'COMPLETED_REPLICATION_PENDING_REVIEW'; target: AgentWorkQueueFindingReviewTarget }
-    | { kind: 'RESEARCH_SYNC'; reason: 'READY_RESEARCH_DELIVERY'; researchDelivery: AgentResearchDeliveryCheckpoint };
+    | { kind: 'RESEARCH_SYNC'; reason: 'READY_RESEARCH_DELIVERY'; researchDelivery: AgentResearchSyncCheckpoint };
   cadence: { discovery: 1; validation: 1 };
   validationAuthority: 'EVIDENCE_ONLY' | 'REPLICATION_BOUND_FINDING_DECISION';
 };

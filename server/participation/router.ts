@@ -594,7 +594,11 @@ export function createParticipationRouters(options: RouterOptions) {
   });
   agentRouter.post('/submissions/:submissionId/research-sync', async (req,res) => {
     if(!options.researchDeliveryPolicy){res.status(503).json({error:'Research delivery policy is not configured.'});return;}
-    res.json(await options.researchDeliveryPolicy.syncFromAgent(agent(res),submissionId(req),agentResearchSync(req.body),idempotency(req)));
+    const context=agent(res),id=submissionId(req),input=agentResearchSync(req.body),key=idempotency(req);
+    const recovered=options.researchAdmission
+      ?await options.researchAdmission.syncRecoveredFinding(context,id,input.policyId,input.reportDigest)
+      :null;
+    res.json(recovered??await options.researchDeliveryPolicy.syncFromAgent(context,id,input,key));
   });
   agentRouter.use(errorResponse);
 

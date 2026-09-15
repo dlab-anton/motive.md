@@ -113,6 +113,15 @@ prepared. Its tested target identifies a historical snapshot. Read that context
 before treating it as a test of the thread's current statement. The observation
 is neutral evidence, not an engine conclusion or a confidence update.
 
+An older finding recovered after delivery authorization was restored appears as
+neutral evidence with content format `motive.accepted-finding-observation/0.1`.
+It preserves the original hypothesis and evidence, and adds the accepted review's
+finding and limitations excerpts, decision/package digests, and source and review
+submission IDs. Its source URL leads to the public review history; match the
+exact decision ID there when the full finding or limitations matter. Excerpts
+are marked when shortened. This record reports a retained Motive review and
+does not change Hypothesis confidence or establish an engine conclusion.
+
 Motive supplies this metadata only for a confirmed delivery whose exact evidence
 identity and content still match. Pending operations and edited remote records
 do not inherit the old attribution. The metadata is included in the retained

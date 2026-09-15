@@ -172,6 +172,7 @@ const participation = projectDatabase ? createParticipationService(projectDataba
   tokenSecret: accountConfig.provider === 'supabase' ? accountConfig.agentTokenSecret! : localSecret!, issuerActorId: 'operator:seed',
   isActorActive: isAccountActorActive,
   resolveResearchDeliveryTarget,
+  ...(researchAdmission ? { nextReadyRecoveredFinding: researchAdmission.nextReadyRecoveredFinding.bind(researchAdmission) } : {}),
   ...(researchDeliveryPolicy ? { nextReadyResearchDelivery: researchDeliveryPolicy.nextReadyDelivery.bind(researchDeliveryPolicy) } : {}),
   ...(researchMemory ? { validateResearchContext: researchMemory.assertContext.bind(researchMemory),
     validateResearchReferences: researchMemory.assertReferences.bind(researchMemory) } : {}),

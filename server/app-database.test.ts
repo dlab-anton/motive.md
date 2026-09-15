@@ -30,6 +30,18 @@ function exactMcpSchema(): PostgresSchemaStatus {
 }
 
 describe('bounded additive MCP schema rollout', () => {
+  it('keeps existing MCP available while only the recovery migration is pending', async () => {
+    const exact = exactMcpSchema();
+    const recovery = { name: '048_legacy_agent_memory_recovery.sql', checksum: 'recovery' };
+    const schema = { ...exact, expected: [...exact.expected, recovery], exact: false,
+      problems: [`Missing migration ${recovery.name}.`] };
+    expect(applicationSchemaCanStart(schema)).toBe(true);
+    vi.mocked(getPostgresSchemaStatus).mockResolvedValue(schema);
+    await expect(createMcpSchemaReadiness({} as never)()).resolves.toBe(true);
+    expect(applicationSchemaCanStart({ ...schema, applied: schema.applied.slice(1) })).toBe(false);
+    expect(applicationSchemaCanStart({ ...schema, problems: [...schema.problems, 'Checksum mismatch for 001_base.sql.'] })).toBe(false);
+  });
+
   it('accepts an exact schema and only the sole missing MCP migration', () => {
     expect(applicationSchemaCanStart(exactMcpSchema())).toBe(true);
     expect(applicationSchemaCanStart(missingMcpSchema())).toBe(true);

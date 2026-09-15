@@ -215,6 +215,9 @@ pgDescribe('automatic memory admission on isolated PostgreSQL',()=>{
       idempotencyKey:`memory-policy-${randomUUID()}`,approvedApiBaseUrl:'https://engine.invalid/api/v1',
       contract:PINNED_REVIEWED_WRITEBACK_CONTRACT},true);
     expect(policy.status).toBe('ACTIVE');
+    expect(await memory.nextReadyRecoveredFinding(reviewerContext)).toBeNull();
+    expect(await policies.nextReadyDelivery(reviewerContext)).toMatchObject({status:'READY',submissionId:source.submissionId,
+      policyId:policy.id,reportDigest:source.reportDigest,reason:'READY_FOR_SYNC'});
     const admitted=await memory.admitFromAgentFinding(reviewerContext,saved.id);
     expect(admitted).toMatchObject({status:'ADMITTED'});
     expect(await memory.admitFromAgentFinding(reviewerContext,saved.id)).toEqual(admitted);
@@ -324,13 +327,18 @@ pgDescribe('automatic memory admission on isolated PostgreSQL',()=>{
       idempotencyKey:`append-policy-${randomUUID()}`,approvedApiBaseUrl:'https://engine.invalid/api/v1',
       contract:PINNED_REVIEWED_WRITEBACK_CONTRACT,deliveryMode:'APPEND_EXISTING'},true);
     const memory=createHypothesisSubmissionAdmissionService({pool,vaultKey,isActorActive:actor=>active.has(actor),fetch:fetcher});
-    const admitted=await memory.admitFromAgentFinding(reviewerContext,saved.id);expect(admitted).toMatchObject({status:'ADMITTED'});
-    const checkpoint=await policies.pendingDelivery(sourceContext,source.submissionId);
+    // One queue read prepares the persisted target-aware ACCEPT after its policy becomes available;
+    // null lets the caller fall through to the ordinary delivery checkpoint created by that preparation.
+    expect(await memory.nextReadyRecoveredFinding(reviewerContext)).toBeNull();
+    const checkpoint=await policies.pendingDelivery(reviewerContext,source.submissionId);
     expect(checkpoint).toMatchObject({status:'READY',mode:'APPEND_EXISTING',policyId:policy.id,target:{selection:researchTarget}});
-    const first=await policies.syncFromAgent(sourceContext,source.submissionId,{policyId:policy.id,reportDigest:source.reportDigest},
+    expect(await policies.nextReadyDelivery(reviewerContext)).toEqual(checkpoint);
+    const first=await policies.syncFromAgent(reviewerContext,source.submissionId,{policyId:policy.id,reportDigest:source.reportDigest},
       `append-sync-${randomUUID()}`);
     expect(first).toMatchObject({status:'PENDING',pendingOperation:'NEUTRAL_EVIDENCE',reason:'TARGET_PRECONDITION_CONFLICT',
       hypothesisId:researchTarget.hypothesisId});expect(calls).toBe(1);
+    expect((await pool.query(`SELECT agent_token_id FROM motive.agent_research_sync_requests
+      WHERE submission_id=$1`,[source.submissionId])).rows).toEqual([{agent_token_id:reviewerContext.tokenId}]);
     expect(await policies.nextReadyDelivery(sourceContext)).toBeNull();
     const completed=await policies.syncFromAgent(sourceContext,source.submissionId,{policyId:policy.id,reportDigest:source.reportDigest},
       `append-retry-${randomUUID()}`);
@@ -350,5 +358,96 @@ pgDescribe('automatic memory admission on isolated PostgreSQL',()=>{
       evidenceBinding:{hypothesisId:researchTarget.hypothesisId,evidenceId,source:expect.stringContaining('/observation'),
         contentDigest:expect.stringMatching(/^sha256:/)},labels:{evidence:'NEUTRAL',context:'HISTORICAL_TESTED_CONTEXT'}});
     expect(await sender.confirmedEvidenceContributions(projectId,scopeId,[{hypothesisId:randomUUID(),evidenceId}])).toEqual(new Map());
+  },60000);
+
+  it('adopts one complete legacy delivery and appends the accepted finding exactly once under current cap3 authority',async()=>{
+    const source=await evidence(sourceContext,{});const hypothesisId=randomUUID(),originalEvidenceId=randomUUID();
+    const legacy=createHypothesisSubmissionDeliveryService({pool,vaultKey,isActorActive:actor=>active.has(actor),
+      fetch:async()=>{throw new Error('Legacy fixture uses retained historical receipts.');}});
+    const prepared=await legacy.sync(owner,{projectSlug:'circle-packing',scopeId,submissionId:source.submissionId,
+      idempotencyKey:`legacy-recovery-${randomUUID()}`,approvedApiBaseUrl:'https://engine.invalid/api/v1',
+      contract:LEGACY_REVIEWED_WRITEBACK_CONTRACT,execute:false});
+    const draft=(await pool.query(`SELECT request_body FROM motive.hypothesis_submission_delivery_operations
+      WHERE delivery_id=$1 AND operation='DRAFT_HYPOTHESIS'`,[prepared.deliveryId])).rows[0].request_body;
+    const draftResponse={...draft,id:hypothesisId,status:'draft',confidence:null,initial_confidence:null,outcome:null,is_archived:false};
+    await pool.query(`INSERT INTO motive.hypothesis_submission_delivery_results
+      (delivery_id,operation,resource_id,response_body,response_digest) VALUES($1,'DRAFT_HYPOTHESIS',$2,$3::jsonb,$4)`,
+    [prepared.deliveryId,hypothesisId,JSON.stringify(draftResponse),digestCanonicalJson(draftResponse)]);
+    await legacy.sync(owner,{projectSlug:'circle-packing',scopeId,submissionId:source.submissionId,
+      idempotencyKey:`legacy-recovery-evidence-${randomUUID()}`,approvedApiBaseUrl:'https://engine.invalid/api/v1',
+      contract:LEGACY_REVIEWED_WRITEBACK_CONTRACT,execute:false});
+    const original=(await pool.query(`SELECT request_body FROM motive.hypothesis_submission_delivery_operations
+      WHERE delivery_id=$1 AND operation='NEUTRAL_EVIDENCE'`,[prepared.deliveryId])).rows[0].request_body;
+    const originalResponse={evidence:{id:originalEvidenceId,hypothesis_id:hypothesisId,content:original.content,
+      source:original.source,evidence_type:'neutral',strength:null,confidence_after:null,created_by:original.created_by,
+      created_at:'2026-09-08T00:00:00.000Z'},hypothesis:{id:hypothesisId,status:'draft',confidence:null,
+      initial_confidence:null,outcome:null}};
+    await pool.query(`INSERT INTO motive.hypothesis_submission_delivery_results
+      (delivery_id,operation,resource_id,response_body,response_digest) VALUES($1,'NEUTRAL_EVIDENCE',$2,$3::jsonb,$4)`,
+    [prepared.deliveryId,originalEvidenceId,JSON.stringify(originalResponse),digestCanonicalJson(originalResponse)]);
+
+    const review=await evidence(reviewerContext,{target:source});const preview=await finding.previewFromAgent(
+      reviewerContext,review.submissionId,source.submissionId);
+    const accepted=await finding.decideFromAgent(reviewerContext,review.submissionId,source.submissionId,{
+      packageDigest:preview.packageDigest,expectedDecisionId:null,decision:'ACCEPT',outcome:'SUPPORTED',
+      finding:`The independent replication accepts this exact bounded legacy result. ${'f'.repeat(1900)}`,
+      limitations:`One frozen source and one exact completed replication. ${'l'.repeat(1900)}`,
+      novelty:'DISTINCT',duplicateOfSubmissionId:null,
+      rationale:`The current reviewer proof binds both completed submissions. ${'r'.repeat(1900)}`},
+    `legacy-recovery-finding-${randomUUID()}`);
+    const policies=createProjectResearchDeliveryPolicyService({pool,vaultKey,isActorActive:actor=>active.has(actor)});
+    const policy=await policies.approve(owner,{projectSlug:'circle-packing',scopeId,workOrderId,
+      idempotencyKey:`legacy-recovery-policy-${randomUUID()}`,approvedApiBaseUrl:'https://engine.invalid/api/v1',
+      contract:PINNED_REVIEWED_WRITEBACK_CONTRACT},true);
+    let calls=0;const recoveredEvidenceId=randomUUID();let retainedKey='';let retainedBody='';
+    const memory=createHypothesisSubmissionAdmissionService({pool,vaultKey,isActorActive:actor=>active.has(actor),
+      fetch:async(_input,init)=>{calls+=1;retainedKey=new Headers(init?.headers).get('Idempotency-Key')!;
+        retainedBody=String(init?.body);const body=JSON.parse(retainedBody);
+        return new Response(JSON.stringify({evidence:{id:recoveredEvidenceId,hypothesis_id:hypothesisId,
+          content:body.content,source:body.source,evidence_type:'neutral',strength:null,confidence_after:null,
+          created_by:body.created_by,created_at:'2026-09-15T00:00:00.000Z'},
+          hypothesis:{id:hypothesisId,status:'draft',confidence:null,initial_confidence:null,outcome:null}}),
+        {status:201,headers:{'content-type':'application/json'}});}});
+    const checkpoint=await memory.nextReadyRecoveredFinding(reviewerContext);
+    expect(checkpoint).toMatchObject({status:'READY',submissionId:source.submissionId,
+      findingDecisionId:accepted.id,deliveryId:prepared.deliveryId,policyId:policy.id,reportDigest:source.reportDigest});
+    expect(calls).toBe(0);
+    const unrelatedPolicy=(await pool.query(`SELECT id FROM motive.project_research_delivery_policies
+      WHERE id<>$1 ORDER BY created_at LIMIT 1`,[policy.id])).rows[0];
+    expect(unrelatedPolicy).toBeTruthy();
+    await expect(pool.query(`INSERT INTO motive.agent_memory_recovery_authorizations(finding_decision_id,policy_id)
+      VALUES($1,$2)`,[accepted.id,unrelatedPolicy.id])).rejects.toMatchObject({code:'42501'});
+    const unrelatedJoin=await participation.join(owner,'Unrelated owner agent',
+      {projectSlug:'circle-packing',publishDisplayName:false,acceptReferenceTerms:true},`unrelated-${randomUUID()}`);
+    const unrelatedContext=await participation.authenticateBearer(unrelatedJoin.token);
+    await expect(memory.syncRecoveredFinding(unrelatedContext,source.submissionId,policy.id,source.reportDigest))
+      .rejects.toMatchObject({code:'FORBIDDEN'});
+    expect(calls).toBe(0);
+    const ownerRecovery=await memory.recoverFindingAsOwner(owner,accepted.id,{execute:true});
+    expect(ownerRecovery.admission).toMatchObject({status:'ADMITTED'});
+    expect(ownerRecovery.checkpoint).toEqual(checkpoint);
+    const completed=ownerRecovery.delivery;
+    expect(completed).toMatchObject({status:'EVIDENCE_RECORDED',deliveryId:prepared.deliveryId,
+      hypothesisId,evidenceId:recoveredEvidenceId});
+    expect(calls).toBe(1);expect(retainedKey).toBe(`motive-agent-memory:${accepted.id}:evidence`);
+    const content=JSON.parse(JSON.parse(retainedBody).content);
+    expect(content).toMatchObject({format:'motive.accepted-finding-observation/0.1',
+      legacyDelivery:{id:prepared.deliveryId,originalEvidenceId},
+      source:{submissionId:source.submissionId,reviewSubmissionId:review.submissionId},
+      finding:{decisionId:accepted.id,packageDigest:preview.packageDigest},
+      labels:{evidence:'NEUTRAL',hypothesisSupport:'UNASSESSED',conclusionApproval:'UNASSESSED'}});
+    expect(content.finding.summary.finding).toMatchObject({truncated:true});
+    expect(content.finding.summary.finding.text).toContain('independent replication accepts');
+    expect(content.finding.summary.limitations).toMatchObject({truncated:true});
+    expect(JSON.parse(retainedBody).expected_channel_id).toBe(channelId);
+    expect(await memory.syncRecoveredFinding(sourceContext,source.submissionId,policy.id,source.reportDigest)).toEqual(completed);
+    expect(calls).toBe(1);expect(await memory.nextReadyRecoveredFinding(reviewerContext)).toBeNull();
+    expect(await memory.publicAdmission('circle-packing',source.submissionId)).toMatchObject({status:'ADMITTED',
+      latestReview:{decision:'ADMIT'}});
+    const counts=(await pool.query(`SELECT
+      (SELECT count(*)::integer FROM motive.agent_memory_recovery_operations WHERE finding_decision_id=$1) operations,
+      (SELECT count(*)::integer FROM motive.agent_memory_recovery_results WHERE finding_decision_id=$1) results,
+      (SELECT count(*)::integer FROM motive.hypothesis_submission_delivery_admission_decisions WHERE finding_decision_id=$1) admissions`,
+    [accepted.id])).rows[0];expect(counts).toEqual({operations:1,results:1,admissions:1});
   },60000);
 });

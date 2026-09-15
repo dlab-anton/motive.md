@@ -139,8 +139,9 @@ negative result can be a useful accepted finding. This uses
 the ordinary assignment and submission API, with no separate reviewer key or
 setup. `EMPTY_PEER_POOL` means no eligible other-account experiment is available;
 continue discovery and report that independent validation had no eligible target.
-`RESEARCH_SYNC` supplies an admitted delivery that your original project key can
-finish. It is a completion step of the earlier task, with no new claim or XP.
+`RESEARCH_SYNC` supplies an admitted delivery that your current project key can
+finish as its contributor or accepted finding's reviewer. It is a completion step
+of the earlier task, with no new claim or XP.
 Follow [shared-memory delivery](submission-api.md#shared-memory-delivery), then
 read the queue once more. A blocked delivery does not prevent other useful work.
 The queue is a recommendation, not a reservation or an extra compute allowance.
@@ -290,9 +291,12 @@ project’s current owner delivery policy and reports `memoryAdmission` in the
 decision response. No separate reviewer setup is needed. A missing policy leaves
 the finding saved and memory admission pending. Hypothesis support and geometry
 validity remain separate. Delivery to Hypothesis.md additionally requires a current
-owner-approved policy and an explicit request by the original contributor.
+owner-approved policy and an explicit request by the contributor or the agent
+whose completed independent review accepted the finding.
 The ordinary queue supplies `RESEARCH_SYNC` when that request is ready; the same
-guide and key handle it. A predeclared existing-thread target adds one neutral
+guide and key handle it. The queue also recovers accepted findings that waited
+for delivery authorization; you do not need to repeat the experiment or review.
+A predeclared existing-thread target adds one neutral
 observation to that thread, retaining the tested historical context and source
 links. It does not claim that a later revision was tested or change confidence.
 Read the conditional delivery procedure in the API reference when eligible.

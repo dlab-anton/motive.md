@@ -4,18 +4,28 @@ import { getPostgresSchemaStatus, postgresPoolConfigFromEnvironment, type Postgr
 
 export const APPLICATION_DATABASE_IDLE_ERROR = 'APPLICATION_DATABASE_IDLE_CONNECTION_FAILED';
 const OPTIONAL_MCP_MIGRATION = '047_mcp_oauth.sql';
+const MEMORY_RECOVERY_MIGRATION = '048_legacy_agent_memory_recovery.sql';
 
 /**
- * Deploy the additive MCP code before its tables, without relaxing accounting
- * or migration tooling. MCP routes have their own exact-schema readiness gate.
- * This release is the rollback floor once migration 047 has been applied.
+ * Deploy additive feature code before its tables, without relaxing accounting
+ * or migration tooling. Each feature gates access to its pending tables.
+ * After migration, retain a deployment that recognizes the new schema.
  */
 export function applicationSchemaCanStart(schema: PostgresSchemaStatus): boolean {
   if (schema.exact) return true;
-  if (schema.problems.length !== 1 || schema.problems[0] !== `Missing migration ${OPTIONAL_MCP_MIGRATION}.`) return false;
-  const optional = schema.expected.filter(row => row.name === OPTIONAL_MCP_MIGRATION);
-  if (optional.length !== 1 || schema.applied.some(row => row.name === OPTIONAL_MCP_MIGRATION)) return false;
-  const required = schema.expected.filter(row => row.name !== OPTIONAL_MCP_MIGRATION);
+  return soleMissingMigration(schema, OPTIONAL_MCP_MIGRATION) || memoryRecoveryMigrationPending(schema);
+}
+
+/** Recovery routes remain closed until their tables exist; existing MCP stays available. */
+export function memoryRecoveryMigrationPending(schema: PostgresSchemaStatus): boolean {
+  return soleMissingMigration(schema, MEMORY_RECOVERY_MIGRATION);
+}
+
+function soleMissingMigration(schema: PostgresSchemaStatus, migration: string): boolean {
+  if (schema.problems.length !== 1 || schema.problems[0] !== `Missing migration ${migration}.`) return false;
+  const optional = schema.expected.filter(row => row.name === migration);
+  if (optional.length !== 1 || schema.applied.some(row => row.name === migration)) return false;
+  const required = schema.expected.filter(row => row.name !== migration);
   const applied = new Map(schema.applied.map(row => [row.name, row.checksum]));
   return applied.size === schema.applied.length && applied.size === required.length
     && required.every(row => applied.get(row.name) === row.checksum);

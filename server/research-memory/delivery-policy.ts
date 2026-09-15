@@ -174,10 +174,22 @@ export class ProjectResearchDeliveryPolicyService {
       const prior=await client.query(`SELECT * FROM motive.agent_research_sync_requests WHERE agent_token_id=$1 AND idempotency_key=$2 FOR UPDATE`,
         [context.tokenId,idempotencyKey]);
       if(prior.rowCount&&text(prior.rows[0],'request_digest')!==requestDigest)fail('CONFLICT','Idempotency-Key is already bound to another research sync request.');
-      const artifact=await client.query(`SELECT 1 FROM motive.participation_submission_artifacts
-        WHERE agent_token_id=$1 AND submission_id=$2 AND project_id=$3 AND report_digest=$4 FOR KEY SHARE`,
-        [context.tokenId,submissionId,context.projectId,input.reportDigest]);
-      if(artifact.rowCount!==1)fail('FORBIDDEN','Only the original current submission credential and exact checker report may request research sync.');
+      const artifact=await client.query(`SELECT artifact.agent_token_id
+        FROM motive.participation_submission_artifacts artifact
+        LEFT JOIN motive.hypothesis_submission_deliveries delivery ON delivery.project_id=artifact.project_id
+          AND delivery.source_submission_id=artifact.submission_id
+        LEFT JOIN LATERAL (SELECT admission.* FROM motive.hypothesis_submission_delivery_admission_decisions admission
+          WHERE admission.delivery_id=delivery.id
+            AND NOT EXISTS(SELECT 1 FROM motive.hypothesis_submission_delivery_admission_decisions successor
+              WHERE successor.previous_decision_id=admission.id) LIMIT 1) admission ON TRUE
+        LEFT JOIN motive.finding_review_decisions finding ON finding.id=admission.finding_decision_id
+          AND finding.source_submission_id=artifact.submission_id AND finding.project_id=artifact.project_id
+        WHERE artifact.submission_id=$2 AND artifact.project_id=$3 AND artifact.report_digest=$4
+          AND (artifact.agent_token_id=$1 OR (admission.decision='ADMIT'
+            AND finding.reviewer_agent_token_id=$1
+            AND motive.valid_agent_memory_admission_proof(finding.reviewer_actor_id,finding.id,delivery.id)))
+        FOR KEY SHARE OF artifact`,[context.tokenId,submissionId,context.projectId,input.reportDigest]);
+      if(artifact.rowCount!==1)fail('FORBIDDEN','Only the source credential or its exact accepted finding reviewer may request research sync.');
       authority=await currentPolicyAuthority(client,input.policyId,{projectId:context.projectId,scopeId:await this.policyScope(client,input.policyId),submissionId});
       if(!authority)fail('FORBIDDEN','Current research delivery policy authority is unavailable.');
       if(prior.rowCount)syncRequestId=text(prior.rows[0],'id');
@@ -205,7 +217,7 @@ export class ProjectResearchDeliveryPolicyService {
           result.resource_id AS evidence_id,blocked.reason AS blocked_reason
         FROM motive.submissions submission
         JOIN motive.participation_submission_artifacts artifact ON artifact.submission_id=submission.id
-          AND artifact.project_id=submission.project_id AND artifact.agent_token_id=$1
+          AND artifact.project_id=submission.project_id
         LEFT JOIN motive.hypothesis_submission_deliveries delivery ON delivery.project_id=submission.project_id
           AND delivery.source_submission_id=submission.id
         LEFT JOIN LATERAL (SELECT item.* FROM motive.hypothesis_submission_delivery_admission_decisions item
@@ -215,7 +227,12 @@ export class ProjectResearchDeliveryPolicyService {
           AND result.operation='NEUTRAL_EVIDENCE'
         LEFT JOIN motive.research_delivery_operation_blocks blocked ON blocked.delivery_id=delivery.id
           AND blocked.operation='NEUTRAL_EVIDENCE'
-        WHERE submission.id=$2 AND submission.project_id=$3`,[context.tokenId,submissionId,context.projectId]);
+        WHERE submission.id=$2 AND submission.project_id=$3
+          AND (artifact.agent_token_id=$1 OR EXISTS(SELECT 1 FROM motive.finding_review_decisions finding
+            WHERE finding.id=tail.finding_decision_id AND finding.source_submission_id=submission.id
+              AND finding.project_id=submission.project_id AND finding.reviewer_agent_token_id=$1
+              AND motive.valid_agent_memory_admission_proof(finding.reviewer_actor_id,finding.id,delivery.id)))`,
+      [context.tokenId,submissionId,context.projectId]);
       if(found.rowCount!==1)fail('NOT_FOUND','Research delivery source was not found for this credential.');
       const row=found.rows[0],reportDigest=text(row,'report_digest');
       if(row.id===null){await client.query('COMMIT');return{format:'motive.agent-research-delivery-checkpoint/0.1',status:'PENDING',
@@ -256,12 +273,17 @@ export class ProjectResearchDeliveryPolicyService {
     const candidates=await this.options.pool.query(`SELECT delivery.source_submission_id
       FROM motive.hypothesis_submission_deliveries delivery
       JOIN motive.participation_submission_artifacts artifact ON artifact.submission_id=delivery.source_submission_id
-        AND artifact.project_id=delivery.project_id AND artifact.agent_token_id=$1
+        AND artifact.project_id=delivery.project_id
       JOIN motive.hypothesis_submission_delivery_admission_decisions admission ON admission.delivery_id=delivery.id
         AND admission.decision='ADMIT'
         AND NOT EXISTS(SELECT 1 FROM motive.hypothesis_submission_delivery_admission_decisions successor
           WHERE successor.previous_decision_id=admission.id)
-      WHERE delivery.project_id=$2 AND NOT EXISTS(SELECT 1 FROM motive.hypothesis_submission_delivery_results result
+      WHERE delivery.project_id=$2
+        AND (artifact.agent_token_id=$1 OR EXISTS(SELECT 1 FROM motive.finding_review_decisions finding
+          WHERE finding.id=admission.finding_decision_id AND finding.source_submission_id=delivery.source_submission_id
+            AND finding.project_id=delivery.project_id AND finding.reviewer_agent_token_id=$1
+            AND motive.valid_agent_memory_admission_proof(finding.reviewer_actor_id,finding.id,delivery.id)))
+        AND NOT EXISTS(SELECT 1 FROM motive.hypothesis_submission_delivery_results result
         WHERE result.delivery_id=delivery.id AND result.operation='NEUTRAL_EVIDENCE')
         AND NOT EXISTS(SELECT 1 FROM motive.research_delivery_operation_blocks blocked
           WHERE blocked.delivery_id=delivery.id AND blocked.operation='NEUTRAL_EVIDENCE')

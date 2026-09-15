@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
-import { digestCanonicalJson } from '../../packages/domain/src/contracts.ts';
+import { canonicalJson,digestCanonicalJson } from '../../packages/domain/src/contracts.ts';
+import { decryptSecret } from '../funding/vault.ts';
 import { createHypothesisSubmissionDeliveryService, type HypothesisSubmissionDeliveryService,
   type JsonObject, type SubmissionDeliveryOptions } from './submission-delivery.ts';
 import { LEGACY_REVIEWED_WRITEBACK_CONTRACT,PINNED_REVIEWED_WRITEBACK_CONTRACT,registeredReviewedWritebackContract,
@@ -18,6 +19,9 @@ const DIGEST=/^sha256:[a-f0-9]{64}$/;
 const KEY=/^[A-Za-z0-9._~-]{8,200}$/;
 const REVIEW_AGENT_TOKEN=/^motive_review_[a-f0-9]{32}_[A-Za-z0-9_-]{43}$/;
 const MAX_RETAINED_SNAPSHOT_BYTES=524_288;
+const MAX_RECOVERY_RESPONSE_BYTES=256*1024;
+const RECOVERY_TIMEOUT_MS=15_000;
+const PUBLIC_ORIGIN='https://motive-md.vercel.app';
 const SNAPSHOT_NOTICE='Hypothesis records are mutable remote research notes. IDs, timestamps, and digests identify this retained snapshot; they are not accepted Motive evidence.' as const;
 
 export type ResearchDeliveryReviewPackageV1=Readonly<{
@@ -120,20 +124,43 @@ function decision(row:QueryResultRow):ResearchDeliveryAdmissionDecision{return{f
   packageDigest:text(row,'review_package_digest'),previousDecisionId:row.previous_decision_id===null?null:text(row,'previous_decision_id'),
   decision:text(row,'decision') as 'ADMIT'|'DECLINE',rationale:text(row,'rationale'),reviewerActorId:text(row,'reviewer_actor_id'),createdAt:dateText(row.created_at)}}
 export type AgentMemoryAdmissionContext=Readonly<{tokenId:string;ownerActorId:string;projectId:string}>;
+export type RecoveredFindingCheckpoint=Readonly<{format:'motive.agent-memory-recovery-checkpoint/0.1';status:'READY';
+  submissionId:string;findingDecisionId:string;deliveryId:string;policyId:string;reportDigest:string;
+  syncPath:'/api/agent/submissions/{submissionId}/research-sync'}>;
+export type RecoveredFindingSyncResult=Readonly<{format:'motive.hypothesis-submission-delivery/0.1';
+  status:'PENDING'|'EVIDENCE_RECORDED';deliveryId:string;sourceIntentId:string;sourceIntentPayloadDigest:string;
+  draftRequestDigest:null;hypothesisId:string;evidenceRequestDigest:string;evidenceId:string|null;
+  pendingOperation:'NEUTRAL_EVIDENCE'|null;reason:'ENGINE_ATTEMPT_UNCONFIRMED'|'TARGET_PRECONDITION_CONFLICT'|null;
+  notice:'A draft and neutral observation do not establish support, conclusion, acceptance, or review.'}>;
+export type OwnerRecoveredFindingResult=Readonly<{admission:FindingReviewMemoryStatus;
+  checkpoint:RecoveredFindingCheckpoint|null;delivery:RecoveredFindingSyncResult|null}>;
 type AutomaticSender=Pick<HypothesisSubmissionDeliveryService,'prepareForReview'|'reviewPackage'|'syncWithPolicyPrincipal'>;
 export type SubmissionAdmissionOptions=SubmissionDeliveryOptions&Readonly<{sender?:AutomaticSender;agentTokenSecret?:string}>;
 
 export class HypothesisSubmissionAdmissionService{
   private readonly sender:AutomaticSender;
+  private readonly fetcher:typeof fetch;
+  private readonly timeoutMs:number;
+  private readonly maxResponseBytes:number;
   constructor(private readonly options:SubmissionAdmissionOptions){
     if(options.agentTokenSecret!==undefined&&Buffer.byteLength(options.agentTokenSecret,'utf8')<32)
       throw new Error('Research admission agent token secret must be at least 32 UTF-8 bytes.');
     this.sender=options.sender??createHypothesisSubmissionDeliveryService(options);
+    this.fetcher=options.fetch??fetch;this.timeoutMs=options.timeoutMs??RECOVERY_TIMEOUT_MS;
+    this.maxResponseBytes=options.maxResponseBytes??MAX_RECOVERY_RESPONSE_BYTES;
   }
 
   private async transaction<T>(work:(client:PoolClient)=>Promise<T>):Promise<T>{
     const client=await this.options.pool.connect();try{await client.query('BEGIN');const result=await work(client);
       await client.query('COMMIT');return result;}catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}
+  }
+
+  private async recoverySchemaAvailable(client:Pool|PoolClient=this.options.pool):Promise<boolean>{
+    const found=await client.query(`SELECT to_regclass('motive.agent_memory_recovery_operations') IS NOT NULL
+      AND to_regclass('motive.agent_memory_recovery_authorizations') IS NOT NULL
+      AND to_regclass('motive.agent_memory_recovery_results') IS NOT NULL
+      AND to_regclass('motive.agent_memory_recovery_blocks') IS NOT NULL AS available`);
+    return found.rows[0]?.available===true;
   }
 
   private requireAgentSecret(){if(!this.options.agentTokenSecret)fail('CONFLICT','Research admission agent access is not configured.');return this.options.agentTokenSecret;}
@@ -615,6 +642,334 @@ export class HypothesisSubmissionAdmissionService{
     return row;
   }
 
+  private recoveryEvidenceBody(finding:QueryResultRow,delivery:QueryResultRow,projectSlug:string):JsonObject{
+    const deliveryId=text(delivery,'id'),submissionId=text(finding,'source_submission_id');
+    const source=`${PUBLIC_ORIGIN}/api/public/projects/${projectSlug}/submissions/${submissionId}/finding-review/history`;
+    const decisionDigest=digestCanonicalJson({id:text(finding,'id'),packageDigest:text(finding,'review_package_digest'),
+      reviewSubmissionId:text(finding,'review_submission_id'),decision:text(finding,'decision'),outcome:text(finding,'outcome'),
+      finding:text(finding,'finding'),limitations:text(finding,'limitations'),novelty:text(finding,'novelty'),
+      duplicateOfSubmissionId:finding.duplicate_of_submission_id===null?null:text(finding,'duplicate_of_submission_id'),
+      rationale:text(finding,'rationale'),reviewedAt:dateText(finding.created_at)});
+    const fullFinding=text(finding,'finding'),fullLimitations=text(finding,'limitations');let content='';
+    for(const limit of [700,350,175,80,0]){const excerpt=(value:string)=>{const points=Array.from(value),short=points.slice(0,limit).join('');
+        return{text:short,truncated:points.length>limit};};
+      content=canonicalJson({format:'motive.accepted-finding-observation/0.1',
+        legacyDelivery:{id:deliveryId,originalEvidenceId:text(delivery,'original_evidence_id'),
+          originalEvidenceResponseDigest:text(delivery,'original_evidence_response_digest')},
+        source:{submissionId,reviewSubmissionId:text(finding,'review_submission_id')},
+        finding:{decisionId:text(finding,'id'),packageDigest:text(finding,'review_package_digest'),
+          decisionDigest,outcome:text(finding,'outcome'),novelty:text(finding,'novelty'),reviewedAt:dateText(finding.created_at),
+          summary:{finding:excerpt(fullFinding),limitations:excerpt(fullLimitations)}},
+        labels:{evidence:'NEUTRAL',context:'HISTORICAL_TESTED_CONTEXT',hypothesisSupport:'UNASSESSED',
+          conclusionApproval:'UNASSESSED'}});
+      if(content.length<=5000)break;
+    }
+    if(content.length>5000||source.length>500)fail('CONFLICT','Recovered finding evidence exceeds the fixed receiver bounds.');
+    const body:JsonObject={content,evidence_type:'neutral',source,created_by:text(delivery,'engine_actor'),
+      expected_channel_id:text(delivery,'channel_id')};
+    if(Buffer.byteLength(canonicalJson(body),'utf8')>32*1024)fail('CONFLICT','Recovered finding request exceeds the fixed delivery bound.');
+    return body;
+  }
+
+  private async prepareLegacyRecovery(client:PoolClient,context:AgentMemoryAdmissionContext,finding:QueryResultRow,
+    delivery:QueryResultRow,authority:PolicyAuthority):Promise<RecoveredFindingCheckpoint>{
+    const findingDecisionId=text(finding,'id'),deliveryId=text(delivery,'id'),submissionId=text(finding,'source_submission_id');
+    const body=this.recoveryEvidenceBody(finding,delivery,authority.projectSlug),bodyDigest=digestCanonicalJson(body);
+    const hypothesisId=text(delivery,'hypothesis_id'),path=`/api/v1/hypotheses/${hypothesisId}/evidence`;
+    const requestDigest=digestCanonicalJson({method:'POST',path,bodyDigest});
+    await client.query(`INSERT INTO motive.agent_memory_recovery_operations
+      (finding_decision_id,legacy_delivery_id,target_hypothesis_id,target_channel_id,request_path,
+       idempotency_key,request_body,request_body_digest,request_digest)
+      VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9) ON CONFLICT(finding_decision_id) DO NOTHING`,
+    [findingDecisionId,deliveryId,hypothesisId,text(delivery,'channel_id'),path,
+      `motive-agent-memory:${findingDecisionId}:evidence`,JSON.stringify(body),bodyDigest,requestDigest]);
+    const operation=await client.query(`SELECT * FROM motive.agent_memory_recovery_operations
+      WHERE finding_decision_id=$1 FOR UPDATE`,[findingDecisionId]);
+    const saved=operation.rows[0];
+    if(operation.rowCount!==1||saved.legacy_delivery_id!==deliveryId
+      ||saved.target_hypothesis_id!==hypothesisId||saved.target_channel_id!==text(delivery,'channel_id')
+      ||saved.request_path!==path||saved.idempotency_key!==`motive-agent-memory:${findingDecisionId}:evidence`
+      ||saved.request_body_digest!==bodyDigest||saved.request_digest!==requestDigest
+      ||digestCanonicalJson(saved.request_body)!==bodyDigest)
+      fail('CONFLICT','Recovered finding operation conflicts with retained state.');
+    await client.query(`INSERT INTO motive.agent_memory_recovery_authorizations(finding_decision_id,policy_id)
+      VALUES($1,$2) ON CONFLICT DO NOTHING`,[findingDecisionId,authority.policyId]);
+    const authorization=await client.query(`SELECT 1 FROM motive.agent_memory_recovery_authorizations
+      WHERE finding_decision_id=$1 AND policy_id=$2 FOR SHARE`,[findingDecisionId,authority.policyId]);
+    if(authorization.rowCount!==1)fail('CONFLICT','Recovered finding authorization could not be retained.');
+
+    const reviewPackage=await this.sender.reviewPackage(deliveryId,client),packageDigest=digestCanonicalJson(reviewPackage);
+    const rationale='An independent completed replication accepted this exact finding for shared-memory retention.';
+    const idempotencyKey=`agent-memory-${findingDecisionId}`;
+    const admissionRequestDigest=digestCanonicalJson({findingDecisionId,deliveryId,packageDigest,
+      expectedDecisionId:null,decision:'ADMIT',rationale});
+    const existing=await client.query(`SELECT * FROM motive.hypothesis_submission_delivery_admission_decisions
+      WHERE finding_decision_id=$1 OR (reviewer_actor_id=$2 AND idempotency_key=$3) FOR UPDATE`,
+    [findingDecisionId,context.ownerActorId,idempotencyKey]);
+    if(existing.rowCount){const row=existing.rows[0];
+      if(existing.rowCount!==1||row.finding_decision_id!==findingDecisionId||row.delivery_id!==deliveryId
+        ||row.reviewer_actor_id!==context.ownerActorId||row.review_package_digest!==packageDigest
+        ||row.previous_decision_id!==null||row.decision!=='ADMIT'||row.rationale!==rationale
+        ||row.idempotency_key!==idempotencyKey||row.request_digest!==admissionRequestDigest
+        ||digestCanonicalJson(row.review_package)!==packageDigest)
+        fail('CONFLICT','Automatic memory admission replay conflicts with retained state.');
+    }else{
+      const latest=await client.query(`SELECT item.id FROM motive.hypothesis_submission_delivery_admission_decisions item
+        WHERE item.delivery_id=$1 AND NOT EXISTS(SELECT 1 FROM motive.hypothesis_submission_delivery_admission_decisions successor
+          WHERE successor.previous_decision_id=item.id) FOR UPDATE`,[deliveryId]);
+      if(latest.rowCount)fail('CONFLICT','Legacy memory recovery conflicts with an existing admission.');
+      await client.query(`INSERT INTO motive.hypothesis_submission_delivery_admission_decisions
+        (id,delivery_id,review_package,review_package_digest,previous_decision_id,decision,reviewer_actor_id,rationale,
+         idempotency_key,request_digest,finding_decision_id)
+        VALUES($1,$2,$3::jsonb,$4,NULL,'ADMIT',$5,$6,$7,$8,$9)`,
+      [randomUUID(),deliveryId,JSON.stringify(reviewPackage),packageDigest,context.ownerActorId,rationale,
+        idempotencyKey,admissionRequestDigest,findingDecisionId]);
+    }
+    return{format:'motive.agent-memory-recovery-checkpoint/0.1',status:'READY',submissionId,findingDecisionId,
+      deliveryId,policyId:authority.policyId,reportDigest:text(delivery,'report_digest'),
+      syncPath:'/api/agent/submissions/{submissionId}/research-sync'};
+  }
+
+  private async retainedRecoveryCheckpoint(context:AgentMemoryAdmissionContext,findingDecisionId:string,
+    policyId?:string):Promise<RecoveredFindingCheckpoint|null>{
+    if(!await this.recoverySchemaAvailable())return null;
+    const rows=await this.options.pool.query(`SELECT recovery.finding_decision_id,recovery.legacy_delivery_id,
+        recovery_auth.policy_id,delivery.source_submission_id,artifact.report_digest,
+        source_token.id AS source_token_id,source_token.owner_actor_id AS source_owner_actor_id,
+        finding.reviewer_agent_token_id,finding.reviewer_actor_id
+      FROM motive.agent_memory_recovery_operations recovery
+      JOIN motive.agent_memory_recovery_authorizations recovery_auth
+        ON recovery_auth.finding_decision_id=recovery.finding_decision_id
+      JOIN motive.finding_review_decisions finding ON finding.id=recovery.finding_decision_id
+      JOIN motive.hypothesis_submission_deliveries delivery ON delivery.id=recovery.legacy_delivery_id
+      JOIN motive.participation_submission_artifacts artifact ON artifact.submission_id=delivery.source_submission_id
+      JOIN motive.participation_agent_tokens source_token ON source_token.id=artifact.agent_token_id
+      JOIN motive.hypothesis_submission_delivery_admission_decisions admission
+        ON admission.finding_decision_id=finding.id AND admission.delivery_id=delivery.id AND admission.decision='ADMIT'
+        AND NOT EXISTS(SELECT 1 FROM motive.hypothesis_submission_delivery_admission_decisions successor
+          WHERE successor.previous_decision_id=admission.id)
+      LEFT JOIN motive.agent_memory_recovery_results result ON result.finding_decision_id=finding.id
+      LEFT JOIN motive.agent_memory_recovery_blocks blocked ON blocked.finding_decision_id=finding.id
+      WHERE finding.id=$1 AND delivery.project_id=$2 AND result.finding_decision_id IS NULL
+        AND blocked.finding_decision_id IS NULL AND ($3::uuid IS NULL OR recovery_auth.policy_id=$3)
+        AND motive.valid_agent_memory_admission_proof(finding.reviewer_actor_id,finding.id,delivery.id)
+      ORDER BY recovery_auth.created_at DESC,recovery_auth.policy_id DESC`,[findingDecisionId,context.projectId,policyId??null]);
+    for(const row of rows.rows){
+      const sourceAccess=row.source_token_id===context.tokenId&&row.source_owner_actor_id===context.ownerActorId;
+      const reviewerAccess=row.reviewer_agent_token_id===context.tokenId&&row.reviewer_actor_id===context.ownerActorId;
+      if(!sourceAccess&&!reviewerAccess)continue;
+      const authorityClient=await this.options.pool.connect();try{await authorityClient.query('BEGIN');
+        const authority=await currentPolicyAuthority(authorityClient,text(row,'policy_id'),{
+          projectId:context.projectId,scopeId:(await authorityClient.query(
+            'SELECT scope_id FROM motive.hypothesis_submission_deliveries WHERE id=$1',[row.legacy_delivery_id])).rows[0]?.scope_id,
+          submissionId:text(row,'source_submission_id'),apiVersion:PINNED_REVIEWED_WRITEBACK_CONTRACT.apiVersion,
+          contractDigest:PINNED_REVIEWED_WRITEBACK_CONTRACT.fileDigest,
+          contractVersion:PINNED_REVIEWED_WRITEBACK_CONTRACT.contractVersion,
+          contractSurfaceDigest:PINNED_REVIEWED_WRITEBACK_CONTRACT.surfaceDigest,
+          implementationDigest:PINNED_REVIEWED_WRITEBACK_CONTRACT.implementationDigest,deliveryMode:'NEW_DRAFT'});
+        await authorityClient.query('COMMIT');
+        if(!authority||!await this.options.isActorActive(authority.approvedByActorId))continue;
+      }catch(error){await authorityClient.query('ROLLBACK').catch(()=>undefined);throw error;}finally{authorityClient.release();}
+      return{format:'motive.agent-memory-recovery-checkpoint/0.1',status:'READY',
+        submissionId:text(row,'source_submission_id'),findingDecisionId:text(row,'finding_decision_id'),
+        deliveryId:text(row,'legacy_delivery_id'),policyId:text(row,'policy_id'),reportDigest:text(row,'report_digest'),
+        syncPath:'/api/agent/submissions/{submissionId}/research-sync'};
+    }
+    return null;
+  }
+
+  /** Discovers one persisted accepted legacy finding and prepares its exact recovery without replaying the old review request. */
+  async nextReadyRecoveredFinding(context:AgentMemoryAdmissionContext):Promise<RecoveredFindingCheckpoint|null>{
+    if(!context||!UUID.test(context.tokenId)||!ACCOUNT.test(context.ownerActorId)||!UUID.test(context.projectId)
+      ||!await this.recoverySchemaAvailable())return null;
+    const candidates=await this.options.pool.query(`SELECT finding.id,finding.reviewer_agent_token_id,finding.reviewer_actor_id
+      FROM motive.finding_review_decisions finding
+      LEFT JOIN motive.hypothesis_submission_deliveries delivery ON delivery.project_id=finding.project_id
+        AND delivery.source_submission_id=finding.source_submission_id
+      JOIN motive.participation_submission_artifacts artifact ON artifact.submission_id=finding.source_submission_id
+      JOIN motive.participation_agent_tokens source_token ON source_token.id=artifact.agent_token_id
+      LEFT JOIN motive.hypothesis_submission_delivery_results draft_result ON draft_result.delivery_id=delivery.id
+        AND draft_result.operation='DRAFT_HYPOTHESIS'
+      LEFT JOIN motive.hypothesis_submission_delivery_results evidence_result ON evidence_result.delivery_id=delivery.id
+        AND evidence_result.operation='NEUTRAL_EVIDENCE'
+      LEFT JOIN motive.agent_memory_recovery_results result ON result.finding_decision_id=finding.id
+      LEFT JOIN motive.agent_memory_recovery_blocks blocked ON blocked.finding_decision_id=finding.id
+      WHERE finding.project_id=$1 AND finding.decision='ACCEPT'
+        AND finding.review_package->>'format' IN ('motive.finding-review-package/0.2','motive.finding-review-package/0.3')
+        AND NOT EXISTS(SELECT 1 FROM motive.finding_review_decisions successor WHERE successor.previous_decision_id=finding.id)
+        AND motive.valid_agent_finding_review_proof(finding.reviewer_actor_id,finding.reviewer_agent_token_id,
+          finding.review_submission_id,finding.source_submission_id,finding.project_id)
+        AND (delivery.id IS NULL OR (finding.review_package->>'format'='motive.finding-review-package/0.2'
+          AND delivery.delivery_mode='NEW_DRAFT'
+          AND delivery.reviewed_contract_digest=$4 AND delivery.reviewed_contract_version=$5
+          AND delivery.reviewed_contract_surface_digest=$6 AND delivery.reviewed_implementation_digest=$7
+          AND draft_result.delivery_id IS NOT NULL AND evidence_result.delivery_id IS NOT NULL))
+        AND ((source_token.id=$2 AND source_token.owner_actor_id=$3)
+          OR (finding.reviewer_agent_token_id=$2 AND finding.reviewer_actor_id=$3))
+        AND result.finding_decision_id IS NULL AND blocked.finding_decision_id IS NULL
+      ORDER BY finding.created_at,finding.id LIMIT 1`,[context.projectId,context.tokenId,context.ownerActorId,
+        LEGACY_REVIEWED_WRITEBACK_CONTRACT.fileDigest,LEGACY_REVIEWED_WRITEBACK_CONTRACT.contractVersion,
+        LEGACY_REVIEWED_WRITEBACK_CONTRACT.surfaceDigest,LEGACY_REVIEWED_WRITEBACK_CONTRACT.implementationDigest]);
+    for(const row of candidates.rows){
+      const derived={tokenId:text(row,'reviewer_agent_token_id'),ownerActorId:text(row,'reviewer_actor_id'),
+        projectId:context.projectId};
+      try{await this.admitFromAgentFinding(derived,text(row,'id'));}catch(error){
+        if(error instanceof SubmissionAdmissionError&&['FORBIDDEN','NOT_FOUND','CONFLICT'].includes(error.code))continue;
+        throw error;
+      }
+      const checkpoint=await this.retainedRecoveryCheckpoint(context,text(row,'id'));
+      if(checkpoint)return checkpoint;
+    }
+    return null;
+  }
+
+  private recoveryOutput(row:QueryResultRow,status:'PENDING'|'EVIDENCE_RECORDED',reason:RecoveredFindingSyncResult['reason'],
+    evidenceId:string|null):RecoveredFindingSyncResult{return{format:'motive.hypothesis-submission-delivery/0.1',status,
+      deliveryId:text(row,'legacy_delivery_id'),sourceIntentId:text(row,'source_intent_id'),
+      sourceIntentPayloadDigest:text(row,'source_intent_payload_digest'),draftRequestDigest:null,
+      hypothesisId:text(row,'target_hypothesis_id'),evidenceRequestDigest:text(row,'request_digest'),evidenceId,
+      pendingOperation:status==='PENDING'?'NEUTRAL_EVIDENCE':null,reason,
+      notice:'A draft and neutral observation do not establish support, conclusion, acceptance, or review.'};}
+
+  private async readRecoveryResponse(response:Response):Promise<JsonObject>{
+    const length=response.headers.get('content-length');
+    if(length&&(!/^\d+$/.test(length)||Number(length)>this.maxResponseBytes))throw new Error('response bound');
+    if(!response.body)throw new Error('response body');const reader=response.body.getReader(),chunks:Buffer[]=[];let total=0,complete=false;
+    try{while(true){const next=await reader.read();if(next.done){complete=true;break;}if(!next.value)continue;
+        total+=next.value.byteLength;if(total>this.maxResponseBytes)throw new Error('response bound');chunks.push(Buffer.from(next.value));}}
+    finally{if(!complete)await reader.cancel().catch(()=>undefined);reader.releaseLock();}
+    const parsed=JSON.parse(Buffer.concat(chunks,total).toString('utf8'));
+    return storedObject(parsed,'Hypothesis recovery response');
+  }
+
+  /** Executes only a previously admitted, immutable legacy recovery operation. */
+  private async syncRecoveredFindingInternal(context:AgentMemoryAdmissionContext,submissionId:string,policyId:string,
+    reportDigest:string,operatorActorId?:string):Promise<RecoveredFindingSyncResult|null>{
+    if(!context||!UUID.test(context.tokenId)||!ACCOUNT.test(context.ownerActorId)||!UUID.test(context.projectId)
+      ||!UUID.test(submissionId)||!UUID.test(policyId)||!DIGEST.test(reportDigest)||!await this.recoverySchemaAvailable())return null;
+    if(!await this.options.isActorActive(operatorActorId??context.ownerActorId))
+      fail('UNAUTHORIZED','The owning account is no longer active.');
+    const client=await this.options.pool.connect();let transaction=true;let requestTimer:ReturnType<typeof setTimeout>|undefined;
+    try{await client.query('BEGIN');await client.query(`SET LOCAL lock_timeout='5s'`);
+      const found=await client.query(`SELECT recovery.*,delivery.source_intent_id,delivery.source_intent_payload_digest,
+          delivery.project_id,delivery.scope_id,delivery.source_submission_id,delivery.engine_actor,
+          artifact.report_digest,source_token.id AS source_token_id,source_token.owner_actor_id AS source_owner_actor_id,
+          finding.reviewer_agent_token_id,finding.reviewer_actor_id,admission.id AS admission_id,
+          result.evidence_id,result.response_body,result.response_digest,blocked.reason AS blocked_reason
+        FROM motive.agent_memory_recovery_operations recovery
+        JOIN motive.agent_memory_recovery_authorizations recovery_auth
+          ON recovery_auth.finding_decision_id=recovery.finding_decision_id AND recovery_auth.policy_id=$4
+        JOIN motive.hypothesis_submission_deliveries delivery ON delivery.id=recovery.legacy_delivery_id
+        JOIN motive.participation_submission_artifacts artifact ON artifact.submission_id=delivery.source_submission_id
+        JOIN motive.participation_agent_tokens source_token ON source_token.id=artifact.agent_token_id
+        JOIN motive.finding_review_decisions finding ON finding.id=recovery.finding_decision_id
+        JOIN motive.hypothesis_submission_delivery_admission_decisions admission
+          ON admission.finding_decision_id=finding.id AND admission.delivery_id=delivery.id AND admission.decision='ADMIT'
+          AND NOT EXISTS(SELECT 1 FROM motive.hypothesis_submission_delivery_admission_decisions successor
+            WHERE successor.previous_decision_id=admission.id)
+        LEFT JOIN motive.agent_memory_recovery_results result ON result.finding_decision_id=finding.id
+        LEFT JOIN motive.agent_memory_recovery_blocks blocked ON blocked.finding_decision_id=finding.id
+        WHERE delivery.project_id=$1 AND delivery.source_submission_id=$2 AND artifact.report_digest=$3
+          AND motive.valid_agent_memory_admission_proof(finding.reviewer_actor_id,finding.id,delivery.id)
+        FOR UPDATE OF recovery,admission`,[context.projectId,submissionId,reportDigest,policyId]);
+      if(found.rowCount!==1){await client.query('ROLLBACK');transaction=false;return null;}const row=found.rows[0];
+      const sourceAccess=row.source_token_id===context.tokenId&&row.source_owner_actor_id===context.ownerActorId;
+      const reviewerAccess=row.reviewer_agent_token_id===context.tokenId&&row.reviewer_actor_id===context.ownerActorId;
+      let operatorAccess=false;if(operatorActorId){const owner=await client.query(`SELECT 1 FROM motive.memberships membership
+          JOIN motive.account_identities identity ON identity.actor_id=membership.actor_id AND identity.status='ACTIVE'
+          WHERE membership.project_id=$1 AND membership.actor_id=$2 AND membership.revoked_at IS NULL
+            AND membership.role IN ('OWNER','STEWARD') FOR SHARE OF membership,identity`,[context.projectId,operatorActorId]);
+        operatorAccess=owner.rowCount===1;}
+      if(operatorActorId?!operatorAccess:(!sourceAccess&&!reviewerAccess))
+        fail('FORBIDDEN',operatorActorId?'Current project owner or steward authority is required.':'Exact source or reviewer authority is required.');
+      const currentFinding=await this.lockedAgentFinding(client,{tokenId:text(row,'reviewer_agent_token_id'),
+        ownerActorId:text(row,'reviewer_actor_id'),projectId:context.projectId},text(row,'finding_decision_id'));
+      if(currentFinding.is_current!==true||currentFinding.decision!=='ACCEPT')
+        fail('FORBIDDEN','A current accepted exact replication finding is required.');
+      if(row.evidence_id!==null){const response=storedObject(row.response_body,'recovery result');
+        if(digestCanonicalJson(response)!==text(row,'response_digest'))fail('CONFLICT','Recovered finding result digest is invalid.');
+        await client.query('COMMIT');transaction=false;return this.recoveryOutput(row,'EVIDENCE_RECORDED',null,text(row,'evidence_id'));}
+      if(row.blocked_reason!==null){await client.query('COMMIT');transaction=false;
+        return this.recoveryOutput(row,'PENDING','TARGET_PRECONDITION_CONFLICT',null);}
+      const authority=await currentPolicyAuthority(client,policyId,{projectId:context.projectId,scopeId:text(row,'scope_id'),
+        submissionId,apiVersion:PINNED_REVIEWED_WRITEBACK_CONTRACT.apiVersion,
+        contractDigest:PINNED_REVIEWED_WRITEBACK_CONTRACT.fileDigest,
+        contractVersion:PINNED_REVIEWED_WRITEBACK_CONTRACT.contractVersion,
+        contractSurfaceDigest:PINNED_REVIEWED_WRITEBACK_CONTRACT.surfaceDigest,
+        implementationDigest:PINNED_REVIEWED_WRITEBACK_CONTRACT.implementationDigest,deliveryMode:'NEW_DRAFT'});
+      if(!authority||!await this.options.isActorActive(authority.approvedByActorId))
+        fail('FORBIDDEN','Current research delivery policy authority is unavailable.');
+      const apiKey=decryptSecret(this.options.vaultKey,authority.encryptedApiKey,
+        `research-scope:v1:${authority.scopeId}:${authority.projectId}`);
+      if(!apiKey||apiKey.length>16_384)fail('CONFLICT','Connected research credential is invalid.');
+      const controller=new AbortController();requestTimer=setTimeout(()=>controller.abort(),this.timeoutMs);let response:Response;
+      try{response=await this.fetcher(`${authority.apiBaseUrl}${text(row,'request_path').replace(/^\/api\/v1/,'')}`,{
+          method:'POST',redirect:'error',signal:controller.signal,headers:{'Content-Type':'application/json',Accept:'application/json',
+            'X-API-Key':apiKey,'Idempotency-Key':text(row,'idempotency_key')},body:canonicalJson(row.request_body)});
+      }catch{await client.query('ROLLBACK');transaction=false;
+        return this.recoveryOutput(row,'PENDING','ENGINE_ATTEMPT_UNCONFIRMED',null);}
+      if(response.status===409){await response.body?.cancel().catch(()=>undefined);
+        await client.query(`INSERT INTO motive.agent_memory_recovery_blocks
+          (finding_decision_id,request_digest,reason,http_status) VALUES($1,$2,'TARGET_PRECONDITION_CONFLICT',409)
+          ON CONFLICT DO NOTHING`,[row.finding_decision_id,row.request_digest]);
+        await client.query('COMMIT');transaction=false;return this.recoveryOutput(row,'PENDING','TARGET_PRECONDITION_CONFLICT',null);}
+      if(response.status!==201){await response.body?.cancel().catch(()=>undefined);await client.query('ROLLBACK');transaction=false;
+        return this.recoveryOutput(row,'PENDING','ENGINE_ATTEMPT_UNCONFIRMED',null);}
+      let body:JsonObject;try{body=await this.readRecoveryResponse(response);}catch{await client.query('ROLLBACK');transaction=false;
+        return this.recoveryOutput(row,'PENDING','ENGINE_ATTEMPT_UNCONFIRMED',null);}
+      const evidence=storedObject(body.evidence,'Hypothesis recovery evidence'),hypothesis=storedObject(body.hypothesis,'Hypothesis recovery hypothesis');
+      const request=storedObject(row.request_body,'recovery request'),evidenceId=evidence.id;
+      if(typeof evidenceId!=='string'||!UUID.test(evidenceId)||evidence.hypothesis_id!==row.target_hypothesis_id
+        ||hypothesis.id!==row.target_hypothesis_id||evidence.content!==request.content||evidence.source!==request.source
+        ||evidence.evidence_type!=='neutral'||evidence.created_by!==row.engine_actor)
+        fail('CONFLICT','Recovered finding response does not match its immutable request.');
+      const responseDigest=digestCanonicalJson(body);
+      await client.query(`INSERT INTO motive.agent_memory_recovery_results
+        (finding_decision_id,evidence_id,response_body,response_digest) VALUES($1,$2,$3::jsonb,$4) ON CONFLICT DO NOTHING`,
+      [row.finding_decision_id,evidenceId,JSON.stringify(body),responseDigest]);
+      const saved=await client.query(`SELECT evidence_id,response_body,response_digest FROM motive.agent_memory_recovery_results
+        WHERE finding_decision_id=$1`,[row.finding_decision_id]);
+      if(saved.rowCount!==1||saved.rows[0].evidence_id!==evidenceId||saved.rows[0].response_digest!==responseDigest
+        ||digestCanonicalJson(saved.rows[0].response_body)!==responseDigest)
+        fail('CONFLICT','Recovered finding engine replay conflicts with retained state.');
+      await client.query('COMMIT');transaction=false;return this.recoveryOutput(row,'EVIDENCE_RECORDED',null,evidenceId);
+    }finally{if(requestTimer)clearTimeout(requestTimer);if(transaction)await client.query('ROLLBACK').catch(()=>undefined);client.release();}
+  }
+
+  async syncRecoveredFinding(context:AgentMemoryAdmissionContext,submissionId:string,policyId:string,
+    reportDigest:string):Promise<RecoveredFindingSyncResult|null>{
+    return this.syncRecoveredFindingInternal(context,submissionId,policyId,reportDigest);
+  }
+
+  /** Explicit owner maintenance entry point for already-retained peer decisions. */
+  async recoverFindingAsOwner(ownerActorId:string,findingDecisionId:string,
+    options:{execute:boolean}):Promise<OwnerRecoveredFindingResult>{
+    if(!ACCOUNT.test(ownerActorId)||!UUID.test(findingDecisionId)||!options||typeof options.execute!=='boolean'
+      ||JSON.stringify(Object.keys(options).sort())!==JSON.stringify(['execute']))
+      fail('VALIDATION','Owner finding recovery input is invalid.');
+    if(!await this.options.isActorActive(ownerActorId))fail('UNAUTHORIZED','A current active owner account is required.');
+    if(!await this.recoverySchemaAvailable())return{admission:{status:'PENDING',reason:'OWNER_APPROVAL_REQUIRED'},
+      checkpoint:null,delivery:null};
+    const found=await this.options.pool.query(`SELECT finding.project_id,finding.source_submission_id,
+        finding.reviewer_agent_token_id,finding.reviewer_actor_id,artifact.report_digest
+      FROM motive.finding_review_decisions finding
+      JOIN motive.memberships owner_membership ON owner_membership.project_id=finding.project_id
+        AND owner_membership.actor_id=$2 AND owner_membership.revoked_at IS NULL
+        AND owner_membership.role IN ('OWNER','STEWARD')
+      JOIN motive.account_identities owner_identity ON owner_identity.actor_id=$2 AND owner_identity.status='ACTIVE'
+      JOIN motive.participation_submission_artifacts artifact ON artifact.submission_id=finding.source_submission_id
+        AND artifact.project_id=finding.project_id
+      WHERE finding.id=$1`,[findingDecisionId,ownerActorId]);
+    if(found.rowCount!==1)fail('FORBIDDEN','Current project owner or steward authority is required.');
+    const row=found.rows[0],derived={tokenId:text(row,'reviewer_agent_token_id'),
+      ownerActorId:text(row,'reviewer_actor_id'),projectId:text(row,'project_id')};
+    const admission=await this.admitFromAgentFinding(derived,findingDecisionId);
+    const checkpoint=admission.status==='ADMITTED'?await this.retainedRecoveryCheckpoint(derived,findingDecisionId):null;
+    const delivery=options.execute&&checkpoint?await this.syncRecoveredFindingInternal(derived,checkpoint.submissionId,
+      checkpoint.policyId,text(row,'report_digest'),ownerActorId):null;
+    return{admission,checkpoint,delivery};
+  }
+
   /**
    * Post-finding mutation hook. It prepares only under an already-current owner
    * policy and never executes an engine request.
@@ -630,11 +985,27 @@ export class HypothesisSubmissionAdmissionService{
       const submissionId=text(finding,'source_submission_id');
       const deliveryMode:ResearchDeliveryMode=finding.review_package?.format==='motive.finding-review-package/0.3'
         ?'APPEND_EXISTING':'NEW_DRAFT';
-      const deliveries=await client.query(`SELECT scope_id,engine_api_base_url,scope_configuration_digest,engine_api_version,
+      const deliveries=await client.query(`SELECT delivery.id,delivery.scope_id,delivery.source_intent_id,
+          delivery.source_intent_payload_digest,delivery.engine_actor,delivery.engine_api_base_url,
+          delivery.scope_configuration_digest,delivery.engine_api_version,
           reviewed_contract_digest,reviewed_contract_version,reviewed_contract_surface_digest,reviewed_implementation_digest,
-           created_by_actor_id,delivery_mode,target_binding
-        FROM motive.hypothesis_submission_deliveries WHERE project_id=$1 AND source_submission_id=$2
-        ORDER BY created_at,id FOR SHARE`,[context.projectId,submissionId]);
+          created_by_actor_id,delivery_mode,target_binding,scope.channel_id,artifact.report_digest,
+          draft_result.resource_id AS hypothesis_id,original_result.resource_id AS original_evidence_id,
+          original_result.response_digest AS original_evidence_response_digest,
+          (SELECT count(*)::integer FROM motive.hypothesis_submission_delivery_operations operation
+            WHERE operation.delivery_id=delivery.id) AS operation_count,
+          (SELECT count(*)::integer FROM motive.hypothesis_submission_delivery_results result
+            WHERE result.delivery_id=delivery.id) AS result_count
+        FROM motive.hypothesis_submission_deliveries delivery
+        JOIN motive.project_research_scopes scope ON scope.id=delivery.scope_id AND scope.project_id=delivery.project_id
+        JOIN motive.participation_submission_artifacts artifact ON artifact.submission_id=delivery.source_submission_id
+          AND artifact.project_id=delivery.project_id
+        LEFT JOIN motive.hypothesis_submission_delivery_results draft_result ON draft_result.delivery_id=delivery.id
+          AND draft_result.operation='DRAFT_HYPOTHESIS'
+        LEFT JOIN motive.hypothesis_submission_delivery_results original_result ON original_result.delivery_id=delivery.id
+          AND original_result.operation='NEUTRAL_EVIDENCE'
+        WHERE delivery.project_id=$1 AND delivery.source_submission_id=$2
+        ORDER BY delivery.created_at,delivery.id FOR SHARE OF delivery,scope,artifact`,[context.projectId,submissionId]);
       let contract:ReviewedWritebackContract=PINNED_REVIEWED_WRITEBACK_CONTRACT;
       let binding:{scopeId:string;apiBaseUrl:string;configurationDigest:string;policyId:string}|undefined;
       if(deliveries.rowCount){
@@ -643,6 +1014,16 @@ export class HypothesisSubmissionAdmissionService{
           contractVersion:row.reviewed_contract_version,apiVersion:row.engine_api_version,schemaRevision:'017_write_idempotency',
           surfaceDigest:row.reviewed_contract_surface_digest,implementationDigest:row.reviewed_implementation_digest});
         if(!retained)return{status:'PENDING',reason:'CONTRACT_UNAVAILABLE'} as const;
+        if(deliveryMode==='NEW_DRAFT'&&retained.contractVersion==='hypothesis-http-writeback-capabilities/2'
+          &&row.delivery_mode==='NEW_DRAFT'&&row.operation_count===2&&row.result_count===2&&row.hypothesis_id
+          &&row.original_evidence_id&&row.original_evidence_response_digest){
+          if(!await this.recoverySchemaAvailable(client))return{status:'PENDING',reason:'OWNER_APPROVAL_REQUIRED'} as const;
+          const recoveryAuthority=await this.automaticPolicy(client,context.projectId,submissionId,
+            PINNED_REVIEWED_WRITEBACK_CONTRACT,'NEW_DRAFT',undefined,text(row,'scope_id'));
+          if(!recoveryAuthority||!await this.options.isActorActive(recoveryAuthority.approvedByActorId))
+            return{status:'PENDING',reason:'OWNER_APPROVAL_REQUIRED'} as const;
+          return{status:'RECOVERY' as const,authority:recoveryAuthority,finding,row};
+        }
         const policyId=policyIdFromPrincipal(text(row,'created_by_actor_id'));
         if(!policyId)return{status:'PENDING',reason:'OWNER_APPROVAL_REQUIRED'} as const;
         if(row.delivery_mode!==deliveryMode)return{status:'PENDING',reason:'MEMORY_UNAVAILABLE'} as const;contract=retained;
@@ -663,6 +1044,45 @@ export class HypothesisSubmissionAdmissionService{
       if(!await this.options.isActorActive(authority.approvedByActorId))
         return{status:'PENDING',reason:'OWNER_APPROVAL_REQUIRED'} as const;
       return{status:'READY' as const,authority,contract,submissionId,deliveryMode};
+    });
+    if(initial.status==='RECOVERY')return this.transaction(async client=>{
+      const finding=await this.lockedAgentFinding(client,context,findingDecisionId);
+      if(finding.is_current!==true)return{status:'PENDING',reason:'REVIEW_NO_LONGER_CURRENT'};
+      const authority=await currentPolicyAuthority(client,initial.authority.policyId,{projectId:context.projectId,
+        scopeId:initial.authority.scopeId,submissionId:text(finding,'source_submission_id'),
+        apiBaseUrl:initial.authority.apiBaseUrl,configurationDigest:initial.authority.configurationDigest,
+        apiVersion:PINNED_REVIEWED_WRITEBACK_CONTRACT.apiVersion,
+        contractDigest:PINNED_REVIEWED_WRITEBACK_CONTRACT.fileDigest,
+        contractVersion:PINNED_REVIEWED_WRITEBACK_CONTRACT.contractVersion,
+        contractSurfaceDigest:PINNED_REVIEWED_WRITEBACK_CONTRACT.surfaceDigest,
+        implementationDigest:PINNED_REVIEWED_WRITEBACK_CONTRACT.implementationDigest,deliveryMode:'NEW_DRAFT'});
+      if(!authority||!await this.options.isActorActive(authority.approvedByActorId))
+        return{status:'PENDING',reason:'OWNER_APPROVAL_REQUIRED'};
+      const delivery=await client.query(`SELECT delivery.id,delivery.source_intent_id,delivery.source_intent_payload_digest,
+          delivery.engine_actor,scope.channel_id,artifact.report_digest,draft_result.resource_id AS hypothesis_id,
+          original_result.resource_id AS original_evidence_id,original_result.response_digest AS original_evidence_response_digest
+        FROM motive.hypothesis_submission_deliveries delivery
+        JOIN motive.project_research_scopes scope ON scope.id=delivery.scope_id
+        JOIN motive.participation_submission_artifacts artifact ON artifact.submission_id=delivery.source_submission_id
+        JOIN motive.hypothesis_submission_delivery_results draft_result ON draft_result.delivery_id=delivery.id
+          AND draft_result.operation='DRAFT_HYPOTHESIS'
+        JOIN motive.hypothesis_submission_delivery_results original_result ON original_result.delivery_id=delivery.id
+          AND original_result.operation='NEUTRAL_EVIDENCE'
+        WHERE delivery.id=$1 AND delivery.project_id=$2 AND delivery.scope_id=$3
+          AND delivery.source_submission_id=$4 AND delivery.delivery_mode='NEW_DRAFT'
+          AND delivery.reviewed_contract_digest=$5 AND delivery.reviewed_contract_version=$6
+          AND delivery.reviewed_contract_surface_digest=$7 AND delivery.reviewed_implementation_digest=$8
+          AND (SELECT count(*) FROM motive.hypothesis_submission_delivery_operations operation WHERE operation.delivery_id=delivery.id)=2
+          AND (SELECT count(*) FROM motive.hypothesis_submission_delivery_results result WHERE result.delivery_id=delivery.id)=2
+        FOR UPDATE OF delivery`,[text(initial.row,'id'),context.projectId,authority.scopeId,text(finding,'source_submission_id'),
+          LEGACY_REVIEWED_WRITEBACK_CONTRACT.fileDigest,LEGACY_REVIEWED_WRITEBACK_CONTRACT.contractVersion,
+          LEGACY_REVIEWED_WRITEBACK_CONTRACT.surfaceDigest,LEGACY_REVIEWED_WRITEBACK_CONTRACT.implementationDigest]);
+      if(delivery.rowCount!==1)return{status:'PENDING',reason:'MEMORY_UNAVAILABLE'};
+      await this.prepareLegacyRecovery(client,context,finding,delivery.rows[0],authority);
+      const admission=await client.query(`SELECT id FROM motive.hypothesis_submission_delivery_admission_decisions
+        WHERE finding_decision_id=$1`,[findingDecisionId]);
+      return admission.rowCount===1?{status:'ADMITTED' as const,admissionDecisionId:text(admission.rows[0],'id')}
+        :{status:'PENDING' as const,reason:'MEMORY_UNAVAILABLE' as const};
     });
     if(initial.status!=='READY')return initial;
 
@@ -751,11 +1171,25 @@ export class HypothesisSubmissionAdmissionService{
           if(delivery.rowCount!==1)current=false;else{const row=delivery.rows[0],policyId=policyIdFromPrincipal(text(row,'created_by_actor_id'));
             const proof=await client.query(
               `SELECT motive.valid_agent_memory_admission_proof($1,$2,$3) AS valid`,[latest.reviewerActorId,findingDecisionId,deliveryId]);
-            const policy=policyId?await currentPolicyAuthority(client,policyId,{projectId:text(row,'project_id'),
+            let policy=policyId?await currentPolicyAuthority(client,policyId,{projectId:text(row,'project_id'),
               scopeId:text(row,'scope_id'),submissionId:text(row,'source_submission_id'),apiBaseUrl:text(row,'engine_api_base_url'),
               configurationDigest:text(row,'scope_configuration_digest'),apiVersion:text(row,'engine_api_version'),
               contractDigest:text(row,'reviewed_contract_digest'),contractVersion:text(row,'reviewed_contract_version'),
               contractSurfaceDigest:text(row,'reviewed_contract_surface_digest'),implementationDigest:text(row,'reviewed_implementation_digest')}):null;
+            if(!policy&&await this.recoverySchemaAvailable(client)){const recoveryPolicies=await client.query(
+                `SELECT recovery_auth.policy_id FROM motive.agent_memory_recovery_operations recovery
+                  JOIN motive.agent_memory_recovery_authorizations recovery_auth
+                    ON recovery_auth.finding_decision_id=recovery.finding_decision_id
+                  WHERE recovery.finding_decision_id=$1 AND recovery.legacy_delivery_id=$2
+                  ORDER BY recovery_auth.created_at DESC,recovery_auth.policy_id DESC`,[findingDecisionId,deliveryId]);
+              for(const recoveryPolicy of recoveryPolicies.rows){policy=await currentPolicyAuthority(client,
+                  text(recoveryPolicy,'policy_id'),{projectId:text(row,'project_id'),scopeId:text(row,'scope_id'),
+                    submissionId:text(row,'source_submission_id'),apiVersion:PINNED_REVIEWED_WRITEBACK_CONTRACT.apiVersion,
+                    contractDigest:PINNED_REVIEWED_WRITEBACK_CONTRACT.fileDigest,
+                    contractVersion:PINNED_REVIEWED_WRITEBACK_CONTRACT.contractVersion,
+                    contractSurfaceDigest:PINNED_REVIEWED_WRITEBACK_CONTRACT.surfaceDigest,
+                    implementationDigest:PINNED_REVIEWED_WRITEBACK_CONTRACT.implementationDigest,deliveryMode:'NEW_DRAFT'});
+                if(policy)break;}}
             current=current&&proof.rows[0]?.valid===true&&Boolean(policy)
               &&await this.options.isActorActive(latest.reviewerActorId)
               &&await this.options.isActorActive(policy?.approvedByActorId??'');}

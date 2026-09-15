@@ -53,7 +53,7 @@ import {
 import { researchDeliveryTargetSelectionsEqual, validateResearchDeliveryTargetBinding,
   validateResearchDeliveryTargetSelection, type ResearchDeliveryTargetBinding,
   type ResearchDeliveryTargetSelection } from '../../src/lib/research-delivery-target.ts';
-import type { AgentResearchDeliveryCheckpoint } from '../../src/lib/research-delivery-policy.ts';
+import type { AgentResearchDeliveryCheckpoint, RecoveredFindingCheckpoint } from '../../src/lib/research-delivery-policy.ts';
 import type { ProjectReviewerChange, ProjectReviewers } from '../../src/lib/project-reviewers.ts';
 import type { ContributorReviewedArtifactsPage } from '../../src/lib/reviewed-artifacts.ts';
 
@@ -113,6 +113,7 @@ type ServiceOptions = { tokenSecret: string; issuerActorId: string; now?: () => 
   validateResearchReferences?: (projectId: string, references: SubmissionResearchReference[], client: PoolClient) => Promise<void>;
   resolveResearchDeliveryTarget?: (projectId: string, selection: ResearchDeliveryTargetSelection,
     client: PoolClient) => Promise<ResearchDeliveryTargetBinding>;
+  nextReadyRecoveredFinding?: (context: ParticipationAgentContext) => Promise<RecoveredFindingCheckpoint | null>;
   nextReadyResearchDelivery?: (context: ParticipationAgentContext) => Promise<AgentResearchDeliveryCheckpoint | null> };
 type IdempotentResult<T> = { response: T; effectId: string; replayed: boolean };
 
@@ -898,8 +899,16 @@ export class ParticipationService {
           reportDigest: text(row, 'report_digest'), artifactDigest: text(row, 'witness_digest') },
       } });
     });
-    if (queued.nextTask.kind === 'RESUME' || queued.nextTask.kind === 'FINDING_REVIEW'
-      || !this.options.nextReadyResearchDelivery) return queued;
+    if (queued.nextTask.kind === 'RESUME' || queued.nextTask.kind === 'FINDING_REVIEW') return queued;
+    const recovered = await this.options.nextReadyRecoveredFinding?.(context);
+    if (recovered) {
+      if (recovered.format !== 'motive.agent-memory-recovery-checkpoint/0.1' || recovered.status !== 'READY'
+        || !recovered.policyId || !recovered.deliveryId || !recovered.findingDecisionId || !recovered.syncPath) {
+        throw new Error('Ready recovered finding callback returned an invalid checkpoint.');
+      }
+      return { ...queued, nextTask: { kind: 'RESEARCH_SYNC', reason: 'READY_RESEARCH_DELIVERY', researchDelivery: recovered } };
+    }
+    if (!this.options.nextReadyResearchDelivery) return queued;
     const delivery = await this.options.nextReadyResearchDelivery(context);
     if (!delivery) return queued;
     if (delivery.status !== 'READY' || delivery.reason !== 'READY_FOR_SYNC'
