@@ -12,7 +12,7 @@ import { CirclePackingPitch } from './project-pitch-circle';
 import { MatmulChecker } from './matmul-checker';
 import { MatmulPitch } from './project-pitch-matmul';
 import { useProjectResource } from '@/lib/project-api';
-import { STATIC_PROJECT_POLL_INTERVAL_MS } from '@/lib/project-resource-policy';
+import { PUBLIC_PROJECTION_POLL_INTERVAL_MS, STATIC_PROJECT_POLL_INTERVAL_MS } from '@/lib/project-resource-policy';
 import { journalIdPattern } from '@/lib/research-journal';
 import type { ParticipationMeResponse, ParticipationPublicProjection } from '@/lib/participation';
 import type { ResearchScopePublic } from '@/lib/research-memory';
@@ -40,7 +40,8 @@ function ProjectPreparation({ project }: { project: Project }) {
 
 export function ProjectView({ project, controls: appControls }: { project: Project; controls: SupportControls }) {
   const family = families[project.family];
-  const live = useProjectResource<ParticipationPublicProjection>(project.live ? `/api/public/projects/${project.id}` : null);
+  const live = useProjectResource<ParticipationPublicProjection>(project.live ? `/api/public/projects/${project.id}` : null,
+    { intervalMs: PUBLIC_PROJECTION_POLL_INTERVAL_MS });
   const scope = useProjectResource<ResearchScopePublic | null>(project.live ? `/api/public/projects/${project.id}/research-scope` : null, { intervalMs: STATIC_PROJECT_POLL_INTERVAL_MS });
   // The first project keeps the app-level agent activity; later projects read their own account routes.
   const ownActivity = useProjectResource<ParticipationMeResponse>(appControls.user && project.live && project.id !== DEFAULT_PROJECT_SLUG ? accountProjectPath(project.id, '/me') : null);

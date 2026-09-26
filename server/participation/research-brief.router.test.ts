@@ -7,6 +7,7 @@ import { createParticipationRouters } from './router.ts';
 import { buildResearchBrief } from './research-brief.ts';
 import type { ParticipationService } from './service.ts';
 
+const publicCache = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 const digest = (character: string): `sha256:${string}` => `sha256:${character.repeat(64)}`;
 const summary = (id: string, acceptance: SubmissionSummary['acceptance']): SubmissionSummary => ({
   id, assignmentId: randomUUID(), contributorId: randomUUID(), contributorDisplayName: 'Public contributor',
@@ -65,7 +66,8 @@ function projection(): ParticipationPublicProjection {
 describe('public research brief', () => {
   it('projects bounded orientation fields and leaves the original project response unchanged', async () => {
     const source = projection(); let reads = 0;
-    const service = { publicProjection: async () => { reads += 1; return source; } } as unknown as ParticipationService;
+    const service = { profile: { slug: 'circle-packing' },
+      publicProjection: async () => { reads += 1; return source; } } as unknown as ParticipationService;
     const { publicRouter } = createParticipationRouters({ service, isActorActive: async () => true });
     const app = express(); app.use('/api/public/projects/circle-packing', publicRouter);
     const server = app.listen(0); await once(server, 'listening');
@@ -73,7 +75,7 @@ describe('public research brief', () => {
       const address = server.address(); if (!address || typeof address === 'string') throw new Error('Server did not bind.');
       const origin = `http://127.0.0.1:${address.port}/api/public/projects/circle-packing`;
       const response = await fetch(`${origin}/research-brief`);
-      expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe('no-store'); expect(reads).toBe(1);
+      expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe(publicCache); expect(reads).toBe(1);
       const body = await response.json() as Record<string, any>;
       expect(Object.keys(body)).toEqual(['format','project','bestChecked','bestAccepted','activeAssignments','totalSubmissions',
         'activeResearchIntents','recentResearchHandoffs','recentTasks','projectHref','researchJournalHref','notice']);
@@ -96,8 +98,10 @@ describe('public research brief', () => {
       expect(body.researchJournalHref).toBe('/api/public/projects/circle-packing/research-updates');
 
       const original = await fetch(origin); expect(await original.json()).toEqual(source); expect(reads).toBe(2);
+      expect(original.headers.get('cache-control')).toBe(publicCache);
       const invalid = await fetch(`${origin}/research-brief?before=${randomUUID()}`);
-      expect(invalid.status).toBe(400); expect(await invalid.json()).toEqual({ error: 'validation',
+      expect(invalid.status).toBe(400); expect(invalid.headers.get('cache-control')).toBe('no-store');
+      expect(await invalid.json()).toEqual({ error: 'validation',
         message: 'Research brief does not accept query parameters.' }); expect(reads).toBe(2);
     } finally { server.close(); await once(server, 'close'); }
   });

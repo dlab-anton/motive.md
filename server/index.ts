@@ -172,6 +172,7 @@ const participationOptions = {
   tokenSecret: accountConfig.provider === 'supabase' ? accountConfig.agentTokenSecret! : localSecret!, issuerActorId: 'operator:seed',
   isActorActive: isAccountActorActive,
   resolveResearchDeliveryTarget,
+  publicProjectionCacheMs: 30_000,
   ...(researchAdmission ? { nextReadyRecoveredFinding: researchAdmission.nextReadyRecoveredFinding.bind(researchAdmission) } : {}),
   ...(researchDeliveryPolicy ? { nextReadyResearchDelivery: researchDeliveryPolicy.nextReadyDelivery.bind(researchDeliveryPolicy) } : {}),
   ...(researchMemory ? { validateResearchContext: researchMemory.assertContext.bind(researchMemory),

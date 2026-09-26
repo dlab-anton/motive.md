@@ -66,6 +66,18 @@ const MAX_TRIAL_RESULTS_BYTES = 32 * 1024;
 const MAX_REPRODUCIBILITY_BYTES = MAX_SOLVER_SOURCE_BYTES + MAX_TRIAL_RESULTS_BYTES;
 const CANONICAL_ACCOUNT_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const CANONICAL_SHA256 = /^sha256:[a-f0-9]{64}$/;
+/** One row per submission id: every joined table is keyed by submission_id. */
+const SUBMISSION_SUMMARY_SELECT = `SELECT submission.id,submission.work_order_id,submission.provenance ? 'investigation' AS has_investigation,
+      assessment.submission_id IS NOT NULL AS has_post_check_assessment,
+      reproducibility.submission_id IS NOT NULL AS has_reproducibility,
+      artifact.agent_token_id,artifact.contributor_display_name,
+      token.agent_name,token.model_name,submission.created_at,artifact.report,artifact.witness_digest,artifact.exact_score,
+      artifact.exceeds_reference,review.decision FROM motive.submissions submission
+      JOIN motive.participation_submission_artifacts artifact ON artifact.submission_id=submission.id
+      JOIN motive.participation_agent_tokens token ON token.id=artifact.agent_token_id
+      LEFT JOIN motive.participation_submission_reviews review ON review.submission_id=submission.id
+      LEFT JOIN motive.participation_post_check_assessments assessment ON assessment.submission_id=submission.id
+      LEFT JOIN motive.participation_submission_reproducibility reproducibility ON reproducibility.submission_id=submission.id`;
 const LATEST_SUBMISSION_ADMISSION_CTES = `delivery_tails AS (
     SELECT delivery.source_submission_id,decision.decision,decision.created_at,decision.id,decision.rationale
     FROM motive.hypothesis_submission_delivery_admission_decisions decision
@@ -172,7 +184,9 @@ type ServiceOptions = { tokenSecret: string; issuerActorId: string; now?: () => 
   resolveResearchDeliveryTarget?: (projectId: string, selection: ResearchDeliveryTargetSelection,
     client: PoolClient) => Promise<ResearchDeliveryTargetBinding>;
   nextReadyRecoveredFinding?: (context: ParticipationAgentContext) => Promise<RecoveredFindingCheckpoint | null>;
-  nextReadyResearchDelivery?: (context: ParticipationAgentContext) => Promise<AgentResearchDeliveryCheckpoint | null> };
+  nextReadyResearchDelivery?: (context: ParticipationAgentContext) => Promise<AgentResearchDeliveryCheckpoint | null>;
+  /** Share one public projection build for this many milliseconds; 0 or absent reads the database every time. */
+  publicProjectionCacheMs?: number };
 type IdempotentResult<T> = { response: T; effectId: string; replayed: boolean };
 
 function text(row: QueryResultRow, name: string): string {
@@ -490,9 +504,12 @@ export class ParticipationService {
   private readonly ledger: LedgerKernel;
   readonly profile: ParticipationProjectProfile;
   private readonly now: () => Date;
+  private publicProjectionMemo: { expiresAt: number; value: Promise<ParticipationPublicProjection> } | null = null;
   constructor(private readonly pool: Pool, private readonly options: ServiceOptions) {
     if (Buffer.byteLength(options.tokenSecret, 'utf8') < 32) throw new Error('Participation token secret must be at least 32 UTF-8 bytes.');
     if (!/^operator:[A-Za-z0-9._~-]{1,480}$/.test(options.issuerActorId)) throw new Error('Participation issuerActorId is invalid.');
+    if (options.publicProjectionCacheMs !== undefined && (!Number.isSafeInteger(options.publicProjectionCacheMs)
+      || options.publicProjectionCacheMs < 0)) throw new Error('Participation publicProjectionCacheMs must be a non-negative integer.');
     this.ledger = new LedgerKernel(pool); this.profile = options.profile ?? CIRCLE_PACKING_PARTICIPATION_PROFILE; this.now = options.now ?? (() => new Date());
   }
 
@@ -1539,20 +1556,23 @@ export class ParticipationService {
   }
 
   private async submissionById(client: PoolClient, submissionId: string): Promise<SubmissionSummary> {
-    const result = await client.query(`SELECT submission.id,submission.work_order_id,submission.provenance ? 'investigation' AS has_investigation,
-      assessment.submission_id IS NOT NULL AS has_post_check_assessment,
-      reproducibility.submission_id IS NOT NULL AS has_reproducibility,
-      artifact.agent_token_id,artifact.contributor_display_name,
-      token.agent_name,token.model_name,submission.created_at,artifact.report,artifact.witness_digest,artifact.exact_score,
-      artifact.exceeds_reference,review.decision FROM motive.submissions submission
-      JOIN motive.participation_submission_artifacts artifact ON artifact.submission_id=submission.id
-      JOIN motive.participation_agent_tokens token ON token.id=artifact.agent_token_id
-      LEFT JOIN motive.participation_submission_reviews review ON review.submission_id=submission.id
-      LEFT JOIN motive.participation_post_check_assessments assessment ON assessment.submission_id=submission.id
-      LEFT JOIN motive.participation_submission_reproducibility reproducibility ON reproducibility.submission_id=submission.id
+    const result = await client.query(`${SUBMISSION_SUMMARY_SELECT}
       WHERE submission.id=$1`, [submissionId]);
     if (result.rowCount !== 1) throw new ParticipationError('NOT_FOUND', 'Submission not found.');
     return this.submissionSummary(result.rows[0]);
+  }
+
+  /** submissionById for a list in one round trip; results follow the input order. */
+  private async submissionsByIds(client: PoolClient, submissionIds: string[]): Promise<SubmissionSummary[]> {
+    if (!submissionIds.length) return [];
+    const result = await client.query(`${SUBMISSION_SUMMARY_SELECT}
+      WHERE submission.id=ANY($1::uuid[])`, [submissionIds]);
+    const rows = new Map(result.rows.map(row => [text(row, 'id'), row]));
+    return submissionIds.map(id => {
+      const row = rows.get(id);
+      if (!row) throw new ParticipationError('NOT_FOUND', 'Submission not found.');
+      return this.submissionSummary(row);
+    });
   }
 
   private submissionSummary(row: QueryResultRow): SubmissionSummary {
@@ -1775,7 +1795,7 @@ export class ParticipationService {
         canReview: identityAllowsReview && role !== null && ['OWNER','STEWARD','REVIEWER'].includes(role),
         canManageReviewers: role === 'OWNER' && membership.rows[0].status === 'ACTIVE',
         credentials: tokens.rows.map(row => this.credential(row)), assignments,
-        submissions: await Promise.all(submissions.rows.map(row => this.submissionById(client, text(row, 'submission_id')))),
+        submissions: await this.submissionsByIds(client, submissions.rows.map(row => text(row, 'submission_id'))),
         loopProgress, sessions };
     });
   }
@@ -2399,7 +2419,22 @@ export class ParticipationService {
         ownedSubmissionIds:submissionIds.filter(id=>owned.has(id))};});
   }
 
+  /**
+   * Off by default. With publicProjectionCacheMs, reads inside that window share
+   * one build, in flight or resolved; a failed build is dropped, not served.
+   */
   async publicProjection(): Promise<ParticipationPublicProjection> {
+    const ttl = this.options.publicProjectionCacheMs ?? 0;
+    if (ttl <= 0) return this.loadPublicProjection();
+    const now = this.now().getTime(); const memo = this.publicProjectionMemo;
+    if (memo && memo.expiresAt > now) return memo.value;
+    const entry = { expiresAt: now + ttl, value: this.loadPublicProjection() };
+    this.publicProjectionMemo = entry;
+    entry.value.catch(() => { if (this.publicProjectionMemo === entry) this.publicProjectionMemo = null; });
+    return entry.value;
+  }
+
+  private async loadPublicProjection(): Promise<ParticipationPublicProjection> {
     return this.transaction(async client => {
       const project = await client.query(`SELECT id,current_revision FROM motive.projects WHERE slug=$1 AND visibility='PUBLIC'`, [this.profile.slug]);
       if (project.rowCount !== 1) throw new ParticipationError('NOT_FOUND', 'Project not found.');
@@ -2516,7 +2551,7 @@ export class ParticipationService {
           reviewedSubmissionIds: row.reviewed_submission_ids as string[],
           publicSubmissionIds: row.public_submission_ids as string[] })),
         privateContributionCount: Number(counts.rows[0].private_contributions),
-        submissions: await Promise.all(submissions.rows.map(row => this.submissionById(client, text(row, 'submission_id')))),
+        submissions: await this.submissionsByIds(client, projectedSubmissionIds),
         activity: events.rows.map(row => this.publicActivity(row)),
         researchUpdates,recentResearchHandoffs,
         activeResearchIntents: activeIntents.rows.map(row => ({ assignmentId: text(row, 'work_order_id'),

@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PublicCircleProjectUsage, PublicProjectRuns, ProjectRunState } from './project-runs';
 import {
   ACTIVE_PROJECT_POLL_INTERVAL_MS,
+  DEFAULT_PROJECT_POLL_INTERVAL_MS,
   INACTIVE_PROJECT_POLL_INTERVAL_MS,
+  PUBLIC_PROJECTION_POLL_INTERVAL_MS,
   ProjectResourcePoller,
   STATIC_PROJECT_POLL_INTERVAL_MS,
   projectRunsPollInterval,
@@ -86,6 +88,12 @@ describe('project resource cadence', () => {
     expect(resolveProjectResourceInterval(STATIC_PROJECT_POLL_INTERVAL_MS, 'data')).toBe(STATIC_PROJECT_POLL_INTERVAL_MS);
     expect(resolveProjectResourceInterval((value: string) => value.length * 1_000, 'scope')).toBe(5_000);
     expect(resolveProjectResourceInterval(0, 'data')).toBe(ACTIVE_PROJECT_POLL_INTERVAL_MS);
+  });
+
+  it('refreshes resources without an explicit cadence slowly and public projections at the CDN window', () => {
+    expect(resolveProjectResourceInterval(undefined, 'data')).toBe(DEFAULT_PROJECT_POLL_INTERVAL_MS);
+    expect(DEFAULT_PROJECT_POLL_INTERVAL_MS).toBeGreaterThanOrEqual(30_000);
+    expect(PUBLIC_PROJECTION_POLL_INTERVAL_MS).toBeGreaterThanOrEqual(60_000);
   });
 });
 
@@ -213,6 +221,22 @@ describe('ProjectResourcePoller', () => {
     expect(poll).toHaveBeenCalledTimes(2);
     await flush();
     expect(onSuccess).toHaveBeenCalledWith(INACTIVE_PROJECT_POLL_INTERVAL_MS);
+    poller.stop();
+  });
+
+  it.each([
+    ['a fixed', PUBLIC_PROJECTION_POLL_INTERVAL_MS, PUBLIC_PROJECTION_POLL_INTERVAL_MS],
+    ['the default', undefined, DEFAULT_PROJECT_POLL_INTERVAL_MS],
+  ] as const)('retries errors at %s cadence instead of the active cadence', async (_label, intervalMs, expected) => {
+    const poll = vi.fn().mockRejectedValue(new Error('offline'));
+    const poller = new ProjectResourcePoller({ poll, onSuccess: vi.fn(), onError: vi.fn(), intervalMs, hidden: () => false });
+
+    poller.start();
+    await flush();
+    await vi.advanceTimersByTimeAsync(expected - 1);
+    expect(poll).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(poll).toHaveBeenCalledTimes(2);
     poller.stop();
   });
 });

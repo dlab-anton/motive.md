@@ -1,5 +1,11 @@
-import { AuthApiError, AuthRetryableFetchError, type SupabaseClient, type User } from '@supabase/supabase-js';
-import { describe, expect, it, vi } from 'vitest';
+import {
+  AuthApiError,
+  AuthRetryableFetchError,
+  AuthUnknownError,
+  type SupabaseClient,
+  type User,
+} from '@supabase/supabase-js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadAccountConfiguration } from './config.ts';
 import { createSupabaseAccountAuthority } from './supabase.ts';
 
@@ -205,12 +211,33 @@ describe('Supabase account authority', () => {
   });
 
   it.each([
+    new AuthRetryableFetchError('fetch failed', 0),
+    new AuthRetryableFetchError('proxy returned malformed content', 404),
+    new AuthRetryableFetchError('Service Unavailable', 503),
+    new AuthApiError('Service for this project is restricted', 402, 'exceed_egress_quota'),
+    new AuthApiError('Request timeout', 408, undefined),
+    new AuthApiError('Rate limited', 429, 'rate_limit'),
+    new AuthApiError('Server failed', 500, 'unexpected_failure'),
+    new AuthUnknownError('Unexpected token < in JSON', new SyntaxError('Unexpected token <')),
+  ])('maps provider unavailability to the fallback-eligible upstream error %#', async error => {
+    const authority = createSupabaseAccountAuthority(
+      { url: 'https://project.supabase.co', publishableKey: publicKey, secretKey },
+      { clientFactory: vi.fn()
+        .mockReturnValueOnce(fakeClient({}))
+        .mockReturnValueOnce(fakeClient({ getUserById: async () => ({ data: { user: null }, error }) })) },
+    );
+    await expect(authority.isActive(subjectId)).rejects.toMatchObject({
+      code: 'UPSTREAM', message: 'The account provider is unavailable.', status: 502,
+    });
+  });
+
+  it.each([
     { data: { user: null }, error: null },
-    { data: { user: null }, error: new AuthRetryableFetchError('proxy returned malformed content', 404) },
-    { data: { user: null }, error: new AuthApiError('Rate limited', 429, 'rate_limit') },
-    { data: { user: null }, error: new AuthApiError('Server failed', 500, 'unexpected_failure') },
+    { data: { user: null }, error: new AuthApiError('Invalid API key', 401, undefined) },
     { data: { user: null }, error: new AuthApiError('Not an admin', 403, 'not_admin') },
-  ])('maps an indeterminate activity response to a fixed upstream error %#', async response => {
+    { data: { user: null }, error: new AuthApiError('Bad request', 400, 'validation_failed') },
+    { data: { user: null }, error: new AuthApiError('Unprocessable', 422, undefined) },
+  ])('fails closed on a rejected server credential or unexpected activity answer %#', async response => {
     const authority = createSupabaseAccountAuthority(
       { url: 'https://project.supabase.co', publishableKey: publicKey, secretKey },
       { clientFactory: vi.fn()
@@ -218,7 +245,7 @@ describe('Supabase account authority', () => {
         .mockReturnValueOnce(fakeClient({ getUserById: async () => response })) },
     );
     await expect(authority.isActive(subjectId)).rejects.toMatchObject({
-      code: 'UPSTREAM', message: 'The account provider is unavailable.', status: 502,
+      code: 'CONFIGURATION', message: 'The account provider is unavailable.', status: 502,
     });
   });
 
@@ -236,6 +263,20 @@ describe('Supabase account authority', () => {
     });
   });
 
+  it('fails closed on an unexpected thrown activity lookup failure without exposing details', async () => {
+    const authority = createSupabaseAccountAuthority(
+      { url: 'https://project.supabase.co', publishableKey: publicKey, secretKey },
+      { clientFactory: vi.fn()
+        .mockReturnValueOnce(fakeClient({}))
+        .mockReturnValueOnce(fakeClient({ getUserById: async () => {
+          throw new TypeError('secret parser detail');
+        } })) },
+    );
+    await expect(authority.isActive(subjectId)).rejects.toMatchObject({
+      code: 'CONFIGURATION', message: 'The account provider is unavailable.', status: 502,
+    });
+  });
+
   it('maps upstream transport failures to a fixed error without exposing details', async () => {
     const authority = createSupabaseAccountAuthority(
       { url: 'https://project.supabase.co', publishableKey: publicKey, secretKey },
@@ -246,5 +287,61 @@ describe('Supabase account authority', () => {
     await expect(authority.authenticate(`Bearer ${'c'.repeat(32)}`)).rejects.toMatchObject({
       code: 'UPSTREAM', message: 'The account provider is unavailable.', status: 502,
     });
+  });
+});
+
+describe('Supabase account authority over supabase-js HTTP responses', () => {
+  const versioned = { 'content-type': 'application/json', 'x-supabase-api-version': '2024-01-01' };
+  const json = (status: number, body: unknown, headers: Record<string, string> = { 'content-type': 'application/json' }) =>
+    () => new Response(JSON.stringify(body), { status, headers });
+  const html = (status: number) =>
+    () => new Response('<html>Restricted</html>', { status, headers: { 'content-type': 'text/html' } });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function realAuthority(respond: () => Response) {
+    const fetchMock = vi.fn(async () => respond());
+    vi.stubGlobal('fetch', fetchMock);
+    const authority = createSupabaseAccountAuthority(
+      { url: 'https://project.supabase.co', publishableKey: publicKey, secretKey },
+    );
+    return { authority, fetchMock };
+  }
+
+  it.each([
+    ['a JSON egress-quota restriction', json(402, { code: 'exceed_egress_quota', message: 'Service is restricted' })],
+    ['a versioned egress-quota restriction', json(402, { code: 'exceed_egress_quota', message: 'Restricted' }, versioned)],
+    ['a non-JSON restriction page', html(402)],
+    ['a rate limit', json(429, { code: 'over_request_rate_limit', msg: 'Slow down' }, versioned)],
+    ['a gateway failure', html(503)],
+    ['a timeout', () => { throw new DOMException('The operation was aborted due to timeout', 'TimeoutError'); }],
+  ])('keeps %s eligible for the durable fallback', async (_name, respond) => {
+    const { authority, fetchMock } = realAuthority(respond);
+    await expect(authority.isActive(subjectId)).rejects.toMatchObject({
+      code: 'UPSTREAM', message: 'The account provider is unavailable.', status: 502,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `https://project.supabase.co/auth/v1/admin/users/${subjectId}`, expect.anything(),
+    );
+  });
+
+  it.each([
+    ['an invalid server key', json(401, { message: 'Invalid API key', hint: 'Double check your key.' })],
+    ['a non-admin key', json(403, { code: 'not_admin', msg: 'User not allowed' }, versioned)],
+  ])('fails closed on %s', async (_name, respond) => {
+    const { authority } = realAuthority(respond);
+    await expect(authority.isActive(subjectId)).rejects.toMatchObject({
+      code: 'CONFIGURATION', message: 'The account provider is unavailable.', status: 502,
+    });
+  });
+
+  it.each([
+    ['a JSON restriction', json(402, { code: 'exceed_egress_quota', message: 'Service is restricted' })],
+    ['a non-JSON restriction page', html(402)],
+  ])('still declines a human session during %s', async (_name, respond) => {
+    const { authority } = realAuthority(respond);
+    await expect(authority.authenticate(`Bearer ${'d'.repeat(32)}`)).resolves.toBeNull();
   });
 });

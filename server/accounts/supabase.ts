@@ -1,4 +1,11 @@
-import { createClient, isAuthApiError, type SupabaseClient, type User } from '@supabase/supabase-js';
+import {
+  createClient,
+  isAuthApiError,
+  isAuthError,
+  isAuthRetryableFetchError,
+  type SupabaseClient,
+  type User,
+} from '@supabase/supabase-js';
 import { AccountError, type AccountPrincipal, type AccountRemoteAuthority } from './types.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -44,6 +51,21 @@ function principal(user: User, now: number): AccountPrincipal | null {
     createdAt,
     emailVerified: true,
   };
+}
+
+// Only an unreachable, overloaded or restricted provider (e.g. over quota) may be bypassed by the durable
+// ACTIVE fallback. A rejected server credential or any other unexpected answer fails closed.
+function providerUnavailable(error: unknown): boolean {
+  // Network failures, timeouts and gateway 5xx responses.
+  if (isAuthRetryableFetchError(error)) return true;
+  // supabase-js drops the status when an error body is not JSON, as with a gateway's restriction page.
+  if (isAuthError(error) && error.name === 'AuthUnknownError') return true;
+  const status = isAuthError(error) ? error.status : undefined;
+  return status !== undefined && (status === 402 || status === 408 || status === 429 || (status >= 500 && status <= 599));
+}
+
+function activityLookupFailure(error: unknown): AccountError {
+  return new AccountError(providerUnavailable(error) ? 'UPSTREAM' : 'CONFIGURATION', 'The account provider is unavailable.', 502);
 }
 
 function bearer(header: string | undefined): string | null {
@@ -112,13 +134,13 @@ export function createSupabaseAccountAuthority(
         const { data, error } = await adminClient.auth.admin.getUserById(subjectId);
         if (error) {
           if (isAuthApiError(error) && (error.status === 404 || error.code === 'user_not_found')) return false;
-          throw new AccountError('UPSTREAM', 'The account provider is unavailable.', 502);
+          throw activityLookupFailure(error);
         }
-        if (!data.user) throw new AccountError('UPSTREAM', 'The account provider is unavailable.', 502);
+        if (!data.user) throw activityLookupFailure(null);
         return isUsableUser(data.user, now());
       } catch (error) {
         if (error instanceof AccountError) throw error;
-        throw new AccountError('UPSTREAM', 'The account provider is unavailable.', 502);
+        throw activityLookupFailure(error);
       }
     },
 

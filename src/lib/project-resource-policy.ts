@@ -3,6 +3,10 @@ import type { PublicCircleProjectUsage, PublicProjectRuns, ProjectRunState } fro
 export const ACTIVE_PROJECT_POLL_INTERVAL_MS = 5_000;
 export const INACTIVE_PROJECT_POLL_INTERVAL_MS = 30_000;
 export const STATIC_PROJECT_POLL_INTERVAL_MS = 60_000;
+/** Resources without an explicit cadence refresh slowly; local actions still refresh them immediately. */
+export const DEFAULT_PROJECT_POLL_INTERVAL_MS = INACTIVE_PROJECT_POLL_INTERVAL_MS;
+/** Matches the public projection's shared CDN freshness window, so faster polling would only re-read the cache. */
+export const PUBLIC_PROJECTION_POLL_INTERVAL_MS = STATIC_PROJECT_POLL_INTERVAL_MS;
 
 const ACTIVE_RUN_STATES = [
   'queued', 'running', 'stopping', 'checking', 'awaiting-review', 'unresolved',
@@ -34,10 +38,16 @@ export function projectUsagePollInterval(data: PublicCircleProjectUsage): number
 }
 
 export function resolveProjectResourceInterval<T>(interval: ProjectResourceInterval<T> | undefined, data: T): number {
+  if (interval === undefined) return DEFAULT_PROJECT_POLL_INTERVAL_MS;
   const resolved = typeof interval === 'function' ? interval(data) : interval;
   return typeof resolved === 'number' && Number.isFinite(resolved) && resolved > 0
     ? resolved
     : ACTIVE_PROJECT_POLL_INTERVAL_MS;
+}
+
+/** Data-driven cadences retry at the active rate; fixed and default cadences keep their own rate. */
+function errorRetryInterval<T>(interval: ProjectResourceInterval<T> | undefined): number {
+  return typeof interval === 'function' ? ACTIVE_PROJECT_POLL_INTERVAL_MS : resolveProjectResourceInterval(interval, undefined as T);
 }
 
 type PollTimer = number | ReturnType<typeof setTimeout>;
@@ -89,7 +99,7 @@ export class ProjectResourcePoller<T> {
     this.clearScheduledPoll();
     const controller = new AbortController();
     this.controller = controller;
-    let nextInterval = ACTIVE_PROJECT_POLL_INTERVAL_MS;
+    let nextInterval = errorRetryInterval(this.options.intervalMs);
     try {
       const data = await this.options.poll(controller.signal);
       if (this.stopped) return;

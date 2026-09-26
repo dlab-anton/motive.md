@@ -14,13 +14,27 @@ type AccountServiceOptions = {
   remote: AccountRemoteAuthority;
   pool: Pool | null;
   disconnectFunding?: (actorId: string) => Promise<void>;
+  now?: () => number;
 };
+
+const REMOTE_ACTIVE_TTL_MS = 5 * 60_000;
+const REMOTE_ACTIVE_MAX_ENTRIES = 10_000;
+const PROVIDER_FALLBACK_WARNING_INTERVAL_MS = 60_000;
+const PROVIDER_UNAVAILABLE_BREAKER_MS = 60_000;
 
 export class AccountService {
   private readonly ledger: LedgerKernel | null;
+  private readonly now: () => number;
+  // Positive remote confirmations only, keyed by actor, in insertion order so the oldest evicts first.
+  private readonly remoteActiveUntil = new Map<string, number>();
+  private lastFallbackWarningAt = Number.NEGATIVE_INFINITY;
+  private suppressedFallbackWarnings = 0;
+  // Per-process circuit breaker: after the provider is found unavailable, skip it until this time.
+  private providerUnavailableUntil = Number.NEGATIVE_INFINITY;
 
   constructor(private readonly options: AccountServiceOptions) {
     this.ledger = options.pool ? new LedgerKernel(options.pool) : null;
+    this.now = options.now ?? Date.now;
   }
 
   async authenticate(header: string | undefined, establish = true): Promise<AccountPrincipal | null> {
@@ -30,11 +44,55 @@ export class AccountService {
     return principal;
   }
 
+  // The durable store is authoritative for revocation and is read on every call. The remote identity check is
+  // cached when positive, and an unavailable provider falls back to the durable ACTIVE status, then is not
+  // consulted again until the breaker interval has passed.
   async isActorActive(actorId: string): Promise<boolean> {
     if (!actorId.startsWith('account:')) return false;
     const status = await this.options.store.status(actorId);
     if (status !== 'ACTIVE') return false;
-    return this.options.remote.isActive(actorId.slice('account:'.length));
+    const cachedUntil = this.remoteActiveUntil.get(actorId);
+    if (cachedUntil !== undefined) {
+      if (this.now() < cachedUntil) return true;
+      this.remoteActiveUntil.delete(actorId);
+    }
+    if (this.now() < this.providerUnavailableUntil) {
+      this.warnProviderFallback();
+      return true;
+    }
+    let active: boolean;
+    try {
+      active = await this.options.remote.isActive(actorId.slice('account:'.length));
+    } catch (error) {
+      if (!(error instanceof AccountError) || error.code !== 'UPSTREAM') throw error;
+      this.providerUnavailableUntil = this.now() + PROVIDER_UNAVAILABLE_BREAKER_MS;
+      this.warnProviderFallback();
+      return true;
+    }
+    if (active) this.rememberRemoteActive(actorId);
+    return active;
+  }
+
+  private rememberRemoteActive(actorId: string): void {
+    this.remoteActiveUntil.delete(actorId);
+    this.remoteActiveUntil.set(actorId, this.now() + REMOTE_ACTIVE_TTL_MS);
+    while (this.remoteActiveUntil.size > REMOTE_ACTIVE_MAX_ENTRIES) {
+      this.remoteActiveUntil.delete(this.remoteActiveUntil.keys().next().value!);
+    }
+  }
+
+  private warnProviderFallback(): void {
+    const now = this.now();
+    if (now - this.lastFallbackWarningAt < PROVIDER_FALLBACK_WARNING_INTERVAL_MS) {
+      this.suppressedFallbackWarnings += 1;
+      return;
+    }
+    console.warn(JSON.stringify({
+      event: 'account_provider_unavailable_fallback',
+      suppressed: this.suppressedFallbackWarnings,
+    }));
+    this.lastFallbackWarningAt = now;
+    this.suppressedFallbackWarnings = 0;
   }
 
   workspace(actorId: string) {
@@ -68,6 +126,7 @@ export class AccountService {
     if (status === null) await this.options.store.establish(principal);
 
     await this.options.store.beginDeletion(principal.actorId);
+    this.remoteActiveUntil.delete(principal.actorId);
     if (this.options.pool) {
       await revokeAccountProjectAuthority(this.options.pool, principal.actorId);
       await this.options.disconnectFunding?.(principal.actorId);
@@ -91,6 +150,8 @@ export class AccountService {
     }
     await this.options.remote.deleteUser(principal.subjectId);
     await this.options.store.finalizeDeletion(principal.actorId);
+    // A check that read ACTIVE before beginDeletion may have cached after the first clear.
+    this.remoteActiveUntil.delete(principal.actorId);
   }
 }
 

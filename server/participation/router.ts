@@ -39,6 +39,7 @@ type AgentLocals = { participationAgent?: ParticipationAgentContext };
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const CANONICAL_UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
+const PUBLIC_PROJECTION_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 
 function object(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -604,11 +605,17 @@ export function createParticipationRouters(options: RouterOptions) {
   agentRouter.use(errorResponse);
 
   const publicRouter = Router();
-  publicRouter.get('/', async (_req, res) => res.json(await options.service.publicProjection()));
+  // The projection ignores the request, so the CDN may share a successful body. The public header is set only once
+  // the body exists; a thrown error keeps no-store.
+  publicRouter.get('/', async (_req, res) => {
+    res.set('Cache-Control', 'no-store'); const projection = await options.service.publicProjection();
+    res.set('Cache-Control', PUBLIC_PROJECTION_CACHE).json(projection);
+  });
   publicRouter.get('/research-brief', async (req, res) => {
     res.set('Cache-Control', 'no-store');
     if (Object.keys(req.query).length) throw new ParticipationError('VALIDATION', 'Research brief does not accept query parameters.');
-    res.json(buildResearchBrief(await options.service.publicProjection()));
+    const brief = buildResearchBrief(await options.service.publicProjection());
+    res.set('Cache-Control', PUBLIC_PROJECTION_CACHE).json(brief);
   });
   publicRouter.get('/research-updates',async(req,res)=>{res.set('Cache-Control','no-store');
     const before=researchJournalBefore(req);res.json(await options.service.publicResearchJournal(before));});

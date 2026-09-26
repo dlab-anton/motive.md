@@ -7,6 +7,7 @@ import { type Category, type Project } from '@/lib/projects';
 import type { SupportState } from '@/lib/support';
 import type { ParticipationPublicProjection } from '@/lib/participation';
 import { useProjectResource } from '@/lib/project-api';
+import { PUBLIC_PROJECTION_POLL_INTERVAL_MS } from '@/lib/project-resource-policy';
 import { projectLifecycleLabel } from './project-live';
 import { ProjectGoalBadge, projectGoalLabel } from './project-goal';
 import { pendingImprovement } from '@/lib/project-goal';
@@ -25,7 +26,8 @@ export function ProjectStats({ data }: { data: ParticipationPublicProjection | n
 }
 
 export function ProjectCard({ project, state }: { project: Project; state: SupportState }) {
-  const live = useProjectResource<ParticipationPublicProjection>(project.live ? `/api/public/projects/${project.id}` : null);
+  const live = useProjectResource<ParticipationPublicProjection>(project.live ? `/api/public/projects/${project.id}` : null,
+    { intervalMs: PUBLIC_PROJECTION_POLL_INTERVAL_MS });
   const following = state.following.includes(project.id);
   const outcome = live.data?.challengeOutcome;
   const pending = pendingImprovement(outcome, live.data?.bestChecked);
