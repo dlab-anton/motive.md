@@ -1,0 +1,36 @@
+{
+  "format": "motive.exoplanet.evidence.v1",
+  "protocolVersion": "motive.exoplanet-hunting.pilot.v1",
+  "dataKind": "synthetic",
+  "target": { "ticId": "4206066" },
+  "taskKind": "control-recovery",
+  "inputs": [
+    {
+      "uri": "urn:sha256:b4939d7dd8558eb9c21008fac3f410472c197031427a3127fc7913ea7476772d",
+      "sha256": "b4939d7dd8558eb9c21008fac3f410472c197031427a3127fc7913ea7476772d",
+      "sector": 1,
+      "timeSystem": "BJD_TDB",
+      "fluxProvenance": "Synthetic placeholder text: synthetic-control-placeholder-v1. This is not a TESS light curve or a measured sector. Sector 1 is an illustrative required field."
+    }
+  ],
+  "method": {
+    "code": { "name": "illustrative-no-analysis", "version": "0.0.0" },
+    "commands": ["NOT_RUN: this example is a schema demonstration, not an executed analysis"],
+    "detrending": "Not run; no flux series was provided.",
+    "search": "Not run; no transit search was performed."
+  },
+  "observations": { "classification": "inconclusive", "events": [] },
+  "diagnostics": [
+    { "name": "Input availability", "status": "not-run", "notes": "No light curve is attached to this synthetic format example." }
+  ],
+  "controlResults": [
+    { "name": "Recovery test", "status": "not-run", "notes": "No injection, recovery attempt, or control result was measured." }
+  ],
+  "limitations": [
+    "Illustrative synthetic bundle only; it contains no TESS observations, measured transit, scientific finding, or validated control."
+  ],
+  "summary": "This example demonstrates the evidence fields and an inconclusive outcome. It makes no astronomical claim.",
+  "nextSteps": [
+    "Retrieve and checksum an actual public observation or create a documented synthetic light curve before running a real control."
+  ]
+}

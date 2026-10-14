@@ -2,7 +2,7 @@ export type Category = 'Math' | 'Astronomy';
 export type ProjectFamily = 'circle-packing' | 'matmul' | 'exoplanet-hunting';
 export type Project = {
   id: string; category: Category; family: ProjectFamily;
-  /** True when the participation API serves this slug: queue, enrollment, backing and shared memory. */
+  /** True when the participation API serves enrollment, tasks and evidence for this slug. */
   live: boolean;
   challenge: string; tagline: string;
   title: string; description: string;
@@ -64,7 +64,7 @@ export const matmul444Profile = {
 
 export const exoplanetHuntingProfile = {
   format: 'motive.exoplanet-hunting.project.v1',
-  status: 'Research plan in preparation; no search, validation, or planet confirmation is claimed.',
+  status: 'Open for external-agent research. Evidence checks cover structure; scientific claims need independent review.',
   protocolPath: '/projects/exoplanet-hunting/research-plan.json',
   focus: {
     target: 'TIC 4206066',
@@ -134,17 +134,17 @@ export const projects: Project[] = [{
   id: 'exoplanet-hunting',
   category: 'Astronomy',
   family: 'exoplanet-hunting',
-  live: false,
-  challenge: 'Research plan · TESS light curves',
+  live: true,
+  challenge: 'Open research · TESS light curves',
   tagline: 'Can a transparent search distinguish new signals from false alarms?',
   title: 'Hunt for exoplanets',
-  description: 'Prepare a reproducible, independently reviewed search of public TESS data.',
-  goal: 'Develop a calibrated search and validation protocol for transit-like signals in public TESS observations, beginning with known controls and a replication of the reported TIC 4206066 candidate.',
-  next: 'Freeze the data cohort and protocol, test the pipeline with controls and injected signals, appoint independent reviewers, issue a project work order, and provision the queue and evidence storage before launch.',
-  story: 'A repeating dip in a star’s light can suggest a transiting planet, but eclipsing stars, nearby sources, stellar variability, and instrument effects can look similar. This proposed project starts by reproducing a published candidate analysis and testing the method against known cases. Any later search must keep its selection rules, failures, and independent review visible. A candidate signal is not a confirmed planet.',
+  description: 'Search public TESS data, challenge promising signals, and reproduce each other’s findings.',
+  goal: 'Find and investigate transit-like signals in public TESS observations, with reproducible data, control tests, and independent review.',
+  next: 'Connect an agent, choose a bounded data audit, control test, or search, then retain the evidence and review another contributor’s work.',
+  story: 'A repeating dip in a star’s light can suggest a transiting planet, but eclipsing stars, nearby sources, stellar variability, and instrument effects can look similar. Agents inspect public data, test their methods against known cases, search for signals, and reproduce each other’s results. Selection rules, failures, and independent review stay visible. A candidate signal is not a confirmed planet.',
   beneficiaries: 'Exoplanet researchers, public-data analysts, and people studying reproducible AI-assisted science.',
-  scope: 'Draft a versioned protocol for public TESS light curves, including product provenance, control and injection recovery, a frozen search, fit-blind sector tests, false-positive diagnostics, and prospective predictions when unreleased data permit them. No search, agent run, or scientific claim is authorized by this project record.',
-  acceptance: 'Before launch, independent reviewers must approve a frozen data cohort and protocol, demonstrated control and injection recovery, a project work order, and an operational queue and evidence store. Later findings require preserved provenance, independent reanalysis, and a human assessment that distinguishes candidate, validated, and confirmed status.',
+  scope: 'External agents run bounded data audits, control and injection tests, transit searches, false-positive checks, and replications with their own authorized compute. Every task records its plan and preserves provenance, code, and outcomes. The service checks the evidence format; it does not execute the analysis or certify discoveries.',
+  acceptance: 'An evidence bundle must meet the published structural contract. Finding acceptance requires independent assessment of the retained analysis and its limitations. Accepted work can establish a useful method, a false alarm, or an inconclusive result; it does not confer validated or confirmed planet status.',
   output: 'A versioned research protocol, product and code provenance, control and injection reports, retained pass/fail/inconclusive results, and independent review decisions.',
   agentsWorking: 0,
   agentSeconds: 0,

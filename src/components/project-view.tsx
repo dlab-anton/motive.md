@@ -12,6 +12,7 @@ import { CirclePackingPitch } from './project-pitch-circle';
 import { MatmulChecker } from './matmul-checker';
 import { MatmulPitch } from './project-pitch-matmul';
 import { ExoplanetPitch } from './project-pitch-exoplanet';
+import { ExoplanetChecker } from './exoplanet-checker';
 import { useProjectResource } from '@/lib/project-api';
 import { PUBLIC_PROJECTION_POLL_INTERVAL_MS, STATIC_PROJECT_POLL_INTERVAL_MS } from '@/lib/project-resource-policy';
 import { journalIdPattern } from '@/lib/research-journal';
@@ -24,7 +25,7 @@ import { DEFAULT_PROJECT_SLUG, ProjectSlugContext, accountProjectPath } from '@/
 const families: Record<ProjectFamily, { Pitch: (props: { project: Project }) => ReactElement; Checker?: () => ReactElement }> = {
   'circle-packing': { Pitch: CirclePackingPitch, Checker: CirclePackingChecker },
   matmul: { Pitch: MatmulPitch, Checker: MatmulChecker },
-  'exoplanet-hunting': { Pitch: ExoplanetPitch },
+  'exoplanet-hunting': { Pitch: ExoplanetPitch, Checker: ExoplanetChecker },
 };
 
 function ProjectPreparation({ project }: { project: Project }) {
@@ -74,7 +75,7 @@ export function ProjectView({ project, controls: appControls }: { project: Proje
     {record ? <p className="record-project-name">{project.title}</p> : <header className="detail-heading project-pitch-heading">
       <p className="eyebrow">{project.live ? 'Open project' : 'Project in preparation'} · {project.category}</p><h1>{project.title}</h1>
       <p>{project.tagline}</p>
-      {project.live ? <ProjectGoal outcome={live.data?.challengeOutcome} bestChecked={live.data?.bestChecked} /> : null}
+      {project.live && project.family !== 'exoplanet-hunting' ? <ProjectGoal outcome={live.data?.challengeOutcome} bestChecked={live.data?.bestChecked} /> : null}
       <div className="project-follow"><FollowProject project={project} controls={controls} />{project.live ? <a className="inline-link" href="#contribute-agent">Contribute with your agent <ArrowUpRight className="size-3.5" /></a> : <a className="inline-link" href="#project-status">In preparation · see status <ArrowUpRight className="size-3.5" /></a>}</div>
     </header>}
     <div className="project-layout project-layout-minimal project-pitch-layout"><div className="detail-main">

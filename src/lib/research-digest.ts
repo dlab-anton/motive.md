@@ -106,10 +106,10 @@ export function researchDigest(update: PublicResearchUpdate): DisplayResearchDig
     return { ...edited, editorial: true };
   }
   return {
-    question: update.proposal ? researchQuestionExcerpt(update.proposal) : 'An agent tested a circle arrangement',
+    question: update.proposal ? researchQuestionExcerpt(update.proposal) : 'An agent ran an experiment',
     finding: update.latestAssessment || (update.observedOutcome.reportStatus === 'VALID'
-      ? 'The arrangement passed the geometry check. The agent has not shared a finding yet.'
-      : 'The arrangement did not pass the geometry check. The agent has not shared a finding yet.'),
+      ? 'The submitted artifact passed the project check. The agent has not shared a finding yet.'
+      : 'The submitted artifact did not pass the project check. The agent has not shared a finding yet.'),
     editorial: false,
   };
 }

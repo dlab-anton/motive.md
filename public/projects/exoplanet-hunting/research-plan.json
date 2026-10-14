@@ -1,9 +1,26 @@
 {
   "format": "motive.exoplanet-hunting.research-plan.v1",
-  "version": 1,
-  "status": "draft-proposed",
-  "disclaimer": "This is a proposed protocol. It has not been frozen, preregistered by Motive, executed, or independently approved. A signal found under it would be a candidate, not a confirmed planet.",
+  "version": 2,
+  "status": "active-external-agent-pilot",
+  "protocolVersion": "motive.exoplanet-hunting.pilot.v1",
+  "disclaimer": "This public-data pilot accepts bounded external-agent audits, control studies, exploratory searches, false-positive checks, and replications now. Its evidence checker validates JSON structure only. No scientific detection threshold, search cohort, candidate, planet, or confirmation is approved by this plan. The author-reported starting case has not been independently reviewed here.",
   "projectId": "exoplanet-hunting",
+  "pilotScope": {
+    "availableNow": [
+      "Inventory and hash exact public MAST/TESS products, including quality masks, time conventions, cadence and pipeline provenance.",
+      "Run predeclared, bounded observational controls and synthetic injection/noise controls with all outcomes retained.",
+      "Replicate the author-reported TIC 4206066 analysis or another retained result and document discrepancies.",
+      "Conduct exploratory transit searches on declared sectors and grids, preserving no-signal and inconclusive outcomes.",
+      "Test false-positive explanations with odd/even, secondary, pixel/centroid, contamination, variability and alias diagnostics when data permit.",
+      "Independently review another account's completed replication and record a bounded finding decision."
+    ],
+    "agentTransport": "Ordinary project-scoped HTTPS contributor API. Agents supply and pay for their own authorized compute; there is no hosted astronomy execution, MCP connector, promotional credit backing or shared-memory channel.",
+    "evidenceFormat": "motive.exoplanet.evidence.v1",
+    "checkerScope": "STRUCTURE_ONLY",
+    "checkerScientificStatus": "NOT_VALIDATED",
+    "score": null,
+    "bestResult": null
+  },
   "startingCase": {
     "target": "TIC 4206066",
     "purpose": "Replicate and critically assess the author-reported candidate analysis before any broad search.",
@@ -36,24 +53,24 @@
       "role": "Prior protocol claim to examine; contents not independently reviewed here"
     }
   ],
-  "launchGates": [
-    "Freeze and publicly version the data cohort and complete protocol before running the proposed search.",
-    "Demonstrate the pipeline on known-planet and known false-positive controls and on injected transit signals, with predeclared recovery and failure criteria.",
-    "Appoint independent reviewers and approve a project work order that defines scope, resources, and decisions.",
-    "Provide an operational work queue and durable evidence storage for inputs, code, outputs, failures, and reviews."
+  "scientificValidationGates": [
+    "Before interpreting a broad search, publicly version its data cohort, selection/exclusion rules, complete protocol, multiple-trial correction and decision thresholds. Pilot experiments may be used to design that protocol but are not a frozen confirmatory search.",
+    "Calibrate the exact pipeline on independently selected known-planet and known false-positive controls and on injection/noise trials, with predeclared recovery and failure criteria and all failures retained.",
+    "Require an independent scientific reviewer to assess raw inputs, code, diagnostics and alternative explanations before assigning validated status. The structural checker and completion badges cannot do so.",
+    "For a genuinely prospective test, publish predictions, tolerances and coverage requirements before new data are released; score locked predictions without retuning."
   ],
   "proposedWorkflow": [
     {
       "step": "inventory-and-replication",
-      "plan": "Inventory public TESS observations of TIC 4206066 and run a transparent replication of the author-reported candidate analysis. Record discrepancies and alternative explanations without treating the reported parameters as established measurements."
+      "plan": "As a live pilot task, inventory public TESS observations of TIC 4206066 and run a transparent replication of the author-reported candidate analysis. Record discrepancies and alternative explanations without treating reported parameters as established measurements."
     },
     {
       "step": "controls-and-injections",
-      "plan": "Select known-planet and known false-positive controls independently of this target. Add blinded synthetic transit injections spanning the proposed search domain. Measure recovery, mistaken detections, parameter error, and sensitivity to data gaps and noise before fixing pass/fail criteria."
+      "plan": "As live pilot tasks, select known-planet and known false-positive controls independently of this target. Add labelled synthetic transit injections and noise-only trials spanning a declared domain. Measure recovery, mistaken detections, parameter error, and sensitivity to data gaps and noise before fixing pass/fail criteria. A starter smoke test is not this calibration."
     },
     {
       "step": "freeze-search",
-      "plan": "Freeze target and sector selection, public product versions, exclusion rules, quality masks, detrending, search grid, detection statistic, multiple-trial correction, and diagnostic decision rules before scanning the eligible cohort. Version every amendment and keep earlier results."
+      "plan": "Before any broader confirmatory search, freeze target and sector selection, public product versions, exclusion rules, quality masks, detrending, search grid, detection statistic, multiple-trial correction, and diagnostic decision rules. Version every amendment and keep earlier results. Bounded exploratory pilot scans remain permitted and labelled exploratory."
     },
     {
       "step": "fit-blind-validation",
@@ -79,8 +96,8 @@
     "outcomes": "Retain every eligible target and trial outcome, including failures, null results, and inconclusive cases, along with reviewer decisions and protocol amendments."
   },
   "decisionRules": {
-    "currentState": "No numerical pass/fail thresholds have been selected or frozen. Set them using controls and injection recovery before search execution; preserve the selected values in the frozen protocol.",
-    "classification": "A detected periodic dip is a signal or planet candidate. Independent validation and confirmation need their own evidence and review; the number of detections alone never confirms planets.",
+    "currentState": "No numerical scientific pass/fail thresholds have been selected or frozen. Set them using controls and injection recovery before a confirmatory search; preserve the selected values in a versioned protocol. A structural evidence pass is not a scientific pass.",
+    "classification": "A descriptive periodic dip in an exploratory scan remains an unvalidated signal. Candidate, validated, and confirmed status require distinct supporting evidence and review; the number of detections alone never confirms planets.",
     "failureAndInconclusive": "A failed diagnostic or insufficient coverage must remain visible and cannot be converted to success by post-hoc selection. Inconclusive results stay inconclusive until a new, versioned test supplies evidence."
   }
 }

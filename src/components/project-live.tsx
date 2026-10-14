@@ -39,7 +39,7 @@ function useEvidenceRecord<T>(href: string) {
 
 function PostCheckRecord({ href }: { href: string }) {
   const { record, error } = useEvidenceRecord<PublicPostCheckAssessment>(href);
-  return <section className="investigation-record" aria-label="Assessment after the geometry check">
+  return <section className="investigation-record" aria-label="Assessment after the project check">
     <span className="eyebrow">The agent’s reflection</span>
     <h4>What the result tells us</h4>
     {record ? <div className="investigation-loop"><p>{record.assessment}</p><details><summary>Possible follow-up · contributor suggestion</summary><p>{record.nextAction}</p><p className="field-hint">The next researcher chooses its own test from the goal and evidence. This suggestion is optional.</p></details><p className="field-hint">Recorded by {record.attribution.contributorDisplayName || 'Private contributor'}’s agent, {record.attribution.agentName}, after receiving the report. This is the contributor’s interpretation. The finding assessment separately records what an independent reviewer accepts.</p></div>
@@ -114,7 +114,7 @@ function SubmissionEvidenceRow({ submission, update, earlier, owned, canReview, 
   useEffect(() => { if (deepLinked) setOpen(true); }, [deepLinked]);
   const digest = update ? researchDigest(update) : null;
   const earlierGain = submission.exactScore && earlier?.exactScore ? exactGain(submission.exactScore, earlier.exactScore, words.direction) : null;
-  const title = submission.reportStatus === 'VALID'
+  const title = words.evidenceOnly ? (submission.reportStatus === 'VALID' ? 'Evidence structure checked; finding awaiting review' : 'Evidence needs correction') : submission.reportStatus === 'VALID'
     ? earlierGain?.startsWith('−') ? 'An earlier candidate remains ahead'
       : earlierGain === '0' ? 'A valid candidate matching an earlier score'
         : submission.exceedsReference ? words.improvement : 'A valid candidate without an improvement'
@@ -124,12 +124,12 @@ function SubmissionEvidenceRow({ submission, update, earlier, owned, canReview, 
     <summary className="result-row-summary">
       <span className="task-agent" title={submission.agentName}>{submission.agentName}</span>
       <strong className="task-title" title={digest?.question || title}>{digest?.question || title}</strong>
-      <span className={`task-status${submission.reportStatus === 'VALID' ? ' is-complete' : ''}`} title={words.checkTitle}>{submission.reportStatus === 'VALID' ? 'Valid' : submission.reportStatus === 'REJECTED' ? 'Rejected' : 'Inconclusive'}</span>
+      <span className={`task-status${submission.reportStatus === 'VALID' ? ' is-complete' : ''}`} title={words.checkTitle}>{submission.reportStatus === 'VALID' ? words.evidenceOnly ? 'Structure checked' : 'Valid' : submission.reportStatus === 'REJECTED' ? 'Rejected' : 'Inconclusive'}</span>
       <time dateTime={submission.createdAt}>{new Date(submission.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</time>
     </summary>
     {open ? <div className="result-row-detail">
       {submission.modelName ? <p className="field-hint">{submission.modelName} · contributor-reported model</p> : null}
-      {submission.exactScore ? <div className="submission-score"><span>{words.objective}</span><strong>{submission.exactScore}</strong><p><strong className="submission-gain">{exactGain(submission.exactScore, words.referenceScore, words.direction)}</strong> compared with the frozen reference.</p>{earlier && earlierGain !== null && submission.reportStatus === 'VALID' ? <ArrangementComparison current={submission} earlier={earlier} gain={earlierGain} /> : null}</div> : <p className="submission-explanation">No valid score was established by this check. The report below explains the result.</p>}
+      {words.evidenceOnly ? <p className="submission-explanation">{words.checkScope} An accepted finding does not confirm a planet.</p> : submission.exactScore ? <div className="submission-score"><span>{words.objective}</span><strong>{submission.exactScore}</strong><p><strong className="submission-gain">{exactGain(submission.exactScore, words.referenceScore, words.direction)}</strong> compared with the frozen reference.</p>{earlier && earlierGain !== null && submission.reportStatus === 'VALID' ? <ArrangementComparison current={submission} earlier={earlier} gain={earlierGain} /> : null}</div> : <p className="submission-explanation">No valid score was established by this check. The report below explains the result.</p>}
       <div className="submission-acceptance"><Clock3 /><span>{submission.acceptance === 'ACCEPTED' ? 'Accepted by a project reviewer' : submission.acceptance === 'REJECTED' ? 'Acceptance declined' : 'Awaiting project review'}</span><time dateTime={submission.createdAt}>{new Date(submission.createdAt).toLocaleString()}</time></div>
       {submission.reportStatus === 'VALID' && submission.exactScore ? <SubmittedArrangement submission={submission} /> : null}
       {update ? <a className="inline-link evidence-research-link" href={`${projectLink(slug)}&tab=updates#research-${submission.id}`}>Read the research behind this result <ArrowUpRight /></a> : submission.investigationHref ? <a className="inline-link evidence-research-link" href={submission.investigationHref}>Read the research record <ArrowUpRight /></a> : null}
@@ -144,7 +144,7 @@ export function SubmittedEvidence({ data, me, accountId = null }: { data: Partic
   const slug = useProjectSlug();
   const location = useLocation();
   const ownership = useSubmissionOwnership(accountId, data?.submissions.map(item => item.id) ?? []);
-  if (!data?.submissions.length) return <p>{data ? 'No community submissions have arrived yet. The checked starting reference is below.' : 'Loading submitted evidence…'}</p>;
+  if (!data?.submissions.length) return <p>{data ? projectWords(slug).evidenceOnly ? 'No evidence bundles have arrived yet. Connect an agent to start a task.' : 'No community submissions have arrived yet. The checked starting reference is below.' : 'Loading submitted evidence…'}</p>;
   // Compare only recorded, earlier checked candidates. A bounded page is not
   // the whole research history, so this does not label a global best.
   const earlierCandidates = new Map<string, SubmissionSummary>();

@@ -678,7 +678,9 @@ export class ParticipationService {
       external: { enabled: true, claim_required: true, max_active_claims: MAX_ACTIVE_CLAIMS, max_lease_seconds: CLAIM_LIFETIME_MS / 1000,
         late_submission_policy: 'reject', review_admission: 'manual', artifact: { formats: [this.profile.witnessFormat], max_bytes: this.profile.maximumWitnessBytes, license_acceptance_required: true } },
       evaluation: { profile_digest: evaluationProfile, human_acceptance_required: true },
-      public_novelty_claim: 'A valid submission is a candidate only; an independent owner or steward decides acceptance.',
+      public_novelty_claim: this.profile.objectiveDirection === 'NONE'
+        ? 'A structurally valid evidence bundle is an unverified research record. It does not establish a candidate, validate a signal, or confirm a planet.'
+        : 'A valid submission is a candidate only; an independent owner or steward decides acceptance.',
     };
     const work = await this.ledger.createWorkOrder({ actorId: this.options.issuerActorId,
       idempotencyKey: `${this.profile.agreementId}-work-order`, projectId, workOrderKey: this.profile.workOrderKey,
@@ -799,10 +801,12 @@ export class ParticipationService {
   async authenticateBearer(raw: string): Promise<ParticipationAgentContext> {
     if (!/^motive_agent_[a-f0-9]{32}_[A-Za-z0-9_-]{43}$/.test(raw)) throw new ParticipationError('UNAUTHORIZED', 'Agent token is invalid.');
     const digest = sha256(raw); const observedAt = this.now();
-    const result = await this.pool.query(`UPDATE motive.participation_agent_tokens
+    const result = await this.pool.query(`UPDATE motive.participation_agent_tokens token
       SET last_used_at=clock_timestamp()
-      WHERE token_digest=$1 AND revoked_at IS NULL AND expires_at>$2
-      RETURNING *`, [digest, observedAt]);
+      FROM motive.projects project
+      WHERE token.token_digest=$1 AND token.revoked_at IS NULL AND token.expires_at>$2
+        AND project.id=token.project_id AND project.slug=$3
+      RETURNING token.*`, [digest, observedAt, this.profile.slug]);
     if (result.rowCount !== 1) {
       const known = await this.pool.query(`SELECT 1 FROM motive.participation_agent_tokens WHERE token_digest=$1`, [digest]);
       if (known.rowCount !== 1) throw new ParticipationError('UNAUTHORIZED', 'Agent token is invalid.');
@@ -817,7 +821,9 @@ export class ParticipationService {
   private async tokenForUpdate(client: PoolClient, context: ParticipationAgentContext): Promise<QueryResultRow> {
     const result = await client.query(`SELECT token.* FROM motive.participation_agent_tokens token
       JOIN motive.memberships membership ON membership.project_id=token.project_id AND membership.actor_id=token.owner_actor_id
-      WHERE token.id=$1 AND membership.revoked_at IS NULL FOR UPDATE OF token FOR KEY SHARE OF membership`, [context.tokenId]);
+      JOIN motive.projects project ON project.id=token.project_id
+      WHERE token.id=$1 AND membership.revoked_at IS NULL AND project.slug=$2
+      FOR UPDATE OF token FOR KEY SHARE OF membership`, [context.tokenId, this.profile.slug]);
     if (result.rowCount !== 1 || result.rows[0].revoked_at || new Date(result.rows[0].expires_at).getTime() <= this.now().getTime()) {
       throw new ParticipationError('UNAUTHORIZED', 'Agent token is invalid or expired.');
     }
@@ -959,7 +965,8 @@ export class ParticipationService {
           reviewSubmissionId,targetSubmissionId,previewHref:`${base}/preview`,decisionHref:`${base}/decisions`}});
       }
 
-      const priorityImprovement=await this.validationCandidate(client,context,true);
+      const priorityImprovement=this.profile.objectiveDirection==='NONE'
+        ? null : await this.validationCandidate(client,context,true);
       if(priorityImprovement)return response({kind:'VALIDATION',reason:'BENCHMARK_IMPROVEMENT_PRIORITY',
         target:priorityImprovement});
 
@@ -1160,6 +1167,9 @@ export class ParticipationService {
   async declareAssignmentIntent(context: ParticipationAgentContext, assignmentId: string,
     rawInput: DeclareAssignmentIntentInput, idempotencyKey: string): Promise<AssignmentProjection> {
     const input = validateAssignmentIntent(rawInput);
+    if (this.profile.objectiveDirection === 'NONE' && !input.experimentProtocol) {
+      throw new ParticipationError('VALIDATION', 'Astronomy work requires a pre-test experiment protocol.');
+    }
     return this.transaction(async client => {
       const token = await this.tokenForUpdate(client, context);
       const account = await client.query(`SELECT account.status FROM motive.account_identities account
@@ -1290,6 +1300,10 @@ export class ParticipationService {
             FROM motive.participation_claim_intents intent
             LEFT JOIN motive.participation_claim_research_targets target ON target.claim_id=intent.claim_id
             WHERE intent.claim_id=$1 FOR KEY SHARE OF intent`, [claim.id]);
+          if (this.profile.objectiveDirection === 'NONE'
+            && (!declaredIntent.rowCount || !declaredIntent.rows[0].experiment_protocol || !investigation)) {
+            throw new ParticipationError('VALIDATION', 'Astronomy evidence requires a pre-test protocol intent and a final investigation record.');
+          }
           if (declaredIntent.rowCount && !investigation) {
             throw new ParticipationError('VALIDATION', 'A claim with a declared intent must submit a final investigation record.');
           }
@@ -1343,7 +1357,11 @@ export class ParticipationService {
             artifactDigest: witnessDigest, artifactManifestDigest: manifestDigest,
             checker: { format: this.profile.checker.format, version: this.profile.checker.version, sourceDigest: this.profile.checker.sourceDigest,
               evaluationProfileDigest: terms.evaluation.profile_digest },
-          }, agentInvestigation, result: checked.result };
+          }, agentInvestigation, result: checked.result,
+          ...(this.profile.objectiveDirection === 'NONE'
+            ? { assessmentScope: 'STRUCTURE_ONLY', provenanceStatus: 'DECLARED_NOT_VERIFIED',
+              scientificStatus: 'NOT_VALIDATED' }
+            : {}) };
           const reportDigest = digestCanonicalJson(reportEnvelope);
           const valid = checked.ok; const exactScore = checked.ok ? checked.exactScore : null;
           const improves = checked.ok ? checked.exceedsReference : null;
@@ -2465,11 +2483,11 @@ export class ParticipationService {
           JOIN motive.participation_claim_completions completion ON completion.submission_id=assessment.submission_id
           WHERE assessment.project_id=$1) completed_cycles`, [projectId, project.rows[0].current_revision]);
       const submissions = await client.query(`SELECT submission_id FROM motive.participation_submission_artifacts WHERE project_id=$1 ORDER BY created_at DESC LIMIT 50`, [projectId]);
-      const best = await client.query(`SELECT artifact.submission_id FROM motive.participation_submission_artifacts artifact
+      const best = this.profile.objectiveDirection === 'NONE' ? null : await client.query(`SELECT artifact.submission_id FROM motive.participation_submission_artifacts artifact
         JOIN motive.participation_submission_reviews review ON review.submission_id=artifact.submission_id
         WHERE artifact.project_id=$1 AND artifact.report='VALID' AND review.decision='ACCEPTED'
         ORDER BY artifact.exact_score::numeric ${this.scoreOrder},artifact.created_at,artifact.submission_id LIMIT 1`, [projectId]);
-      const bestChecked = await client.query(`SELECT artifact.submission_id
+      const bestChecked = this.profile.objectiveDirection === 'NONE' ? null : await client.query(`SELECT artifact.submission_id
         FROM motive.participation_submission_artifacts artifact
         WHERE artifact.project_id=$1 AND artifact.report='VALID' AND artifact.exact_score IS NOT NULL
         ORDER BY artifact.exact_score::numeric ${this.scoreOrder},artifact.created_at,artifact.submission_id LIMIT 1`, [projectId]);
@@ -2535,15 +2553,15 @@ export class ParticipationService {
       const researchUpdates = await this.publicResearchUpdates(client, projectId);
       const recentResearchHandoffs = (await this.researchHandoffs(client,projectId,
         {ownerActorId:null,before:null,eventId:null,limit:6})).items;
-      const challengeOutcome=await this.challengeOutcome(client,projectId);
+      const challengeOutcome=this.profile.objectiveDirection === 'NONE' ? null : await this.challengeOutcome(client,projectId);
       const total = Number(counts.rows[0].submissions); const active = Number(counts.rows[0].active); const accepted = Number(counts.rows[0].accepted);
       return { project: { slug: this.profile.slug, visibility: 'PUBLIC',
         lifecycle: total > 0 ? 'RESULTS_AVAILABLE' : active > 0 ? 'CONTRIBUTING' : 'NOT_STARTED', projectRevision: Number(project.rows[0].current_revision) },
         activeAssignments: active, totalSubmissions: total, acceptedResults: accepted,
-        bestChecked: bestChecked.rowCount
+        bestChecked: bestChecked?.rowCount
           ? await this.submissionById(client, text(bestChecked.rows[0], 'submission_id')) : null,
-        bestAccepted: best.rowCount ? await this.submissionById(client, text(best.rows[0], 'submission_id')) : null,
-        challengeOutcome,
+        bestAccepted: best?.rowCount ? await this.submissionById(client, text(best.rows[0], 'submission_id')) : null,
+        ...(challengeOutcome ? { challengeOutcome } : {}),
         contributors: contributors.rows.map(row => ({ id: text(row, 'id'), displayName: text(row, 'display_name'),
           firstSubmittedAt: dateText(row.first_submitted_at), submissionCount: Number(row.submission_count),
           reviewedArtifactCount: Number(row.reviewed_artifact_count), acceptedFindingCount:Number(row.accepted_finding_count),

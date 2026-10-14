@@ -107,6 +107,7 @@ function AdmissionReview({ submission }: { submission: SubmissionSummary }) {
 }
 
 function ReviewPackage({ preview, submission }: { preview: ResearchDeliveryAdmissionPreview; submission: SubmissionSummary }) {
+  const words = projectWords(useProjectSlug());
   const value = preview.package;
   const draft = value.format === 'motive.research-delivery-review-package/0.1' ? value.operations.draft.body : null;
   return <div className="admission-package">
@@ -120,7 +121,7 @@ function ReviewPackage({ preview, submission }: { preview: ResearchDeliveryAdmis
       <a href={value.observationManifest.href} target="_blank" rel="noreferrer">Read the retained observation and sources ↗</a>
     </> : null}
     {submission.investigationHref ? <p><a href={submission.investigationHref} target="_blank" rel="noreferrer">Compare the original plan and final account ↗</a><span className="field-hint"> Check what changed after the result. The investigation identifies whether an earlier plan was recorded.</span></p> : null}
-    <p><strong>Protected geometry check</strong>{value.report.status === 'VALID' ? 'Geometry valid' : value.report.status === 'REJECTED' ? 'Geometry rejected' : 'Check inconclusive'}{value.report.exactScore ? ` · exact sum ${value.report.exactScore}` : ''}</p>
+    <p><strong>{words.report}</strong>{value.report.status === 'VALID' ? words.checkValid : value.report.status === 'REJECTED' ? words.checkRejected : 'Check inconclusive'}{value.report.exactScore ? ` · ${words.objective}: ${value.report.exactScore}` : ''}</p>
     {value.postCheck.publicSummary ? <div>
       <p><strong>Contributor’s public summary after the check</strong>{value.postCheck.publicSummary.question}</p>
       <p>{value.postCheck.publicSummary.finding}</p>

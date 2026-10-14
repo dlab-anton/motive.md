@@ -116,14 +116,14 @@ export function ResearchTaskRecord({ id, me, accountId }: { id: string; me: Part
       <p className="field-hint">{acceptedFinding ? `${acceptedFinding.outcome ? findingOutcomeLabel[acceptedFinding.outcome] : 'Finding reviewed'} · ${acceptedFinding.novelty === 'DISTINCT' ? 'independently accepted as distinct' : acceptedFinding.novelty === 'DUPLICATE' ? 'independently accepted as a duplicate' : 'independently reviewed'}`
         : findingReview?.decision === 'DECLINE' ? 'Finding declined by the independent reviewer'
           : 'Finding awaiting independent review'}</p>
-      {findingReview?.reviewSubmissionId ? <a className="inline-link" href={`${projectLink(slug)}&experiment=${findingReview.reviewSubmissionId}`}>View the validating experiment ↗</a> : null}
+      {findingReview?.reviewSubmissionId ? <a className="inline-link" href={`${projectLink(slug)}&experiment=${findingReview.reviewSubmissionId}`}>{words.evidenceOnly ? 'View the independent replication' : 'View the validating experiment'} ↗</a> : null}
     </section>
 
     <LaterResearch key={id} id={id} />
 
     <section className="task-record-block task-record-check"><h3>{words.submitted}</h3>
       <p><strong>{submission.reportStatus === 'VALID' ? words.checkValid : submission.reportStatus === 'REJECTED' ? words.checkRejected : 'Inconclusive check'}</strong></p>
-      {submission.exactScore ? <p>{words.objective}: <strong>{submission.exactScore}</strong></p> : <p>No exact score was established.</p>}
+      {words.evidenceOnly ? <p>Scientific findings are assessed separately. A completed task or accepted finding does not confirm a planet.</p> : submission.exactScore ? <p>{words.objective}: <strong>{submission.exactScore}</strong></p> : <p>No exact score was established.</p>}
       <p className="field-hint">{words.checkScope}</p>
     </section>
 

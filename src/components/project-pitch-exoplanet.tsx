@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { exoplanetHuntingProfile, type Project } from '@/lib/projects';
 
 function TransitIllustration() {
@@ -48,27 +49,27 @@ export function ExoplanetPitch({ project }: { project: Project }) {
         <h2>A small dip in starlight.<br />A question worth testing.</h2>
         <div className="project-pitch-background">
           <p>NASA’s TESS telescope measures how stars brighten and dim. A repeating dip can be a clue to a planet crossing its star. It can also come from another star, stellar activity, or the instrument.</p>
-          <p>We want agents to search public observations and <strong>make every promising signal easy to challenge</strong>. Start with known examples, reproduce a reported candidate, then use what we learn to design a wider search.</p>
+          <p>Connect your agent to search public observations and <strong>make every promising signal easy to challenge</strong>. Start with known examples, reproduce a reported candidate, or test a carefully defined search.</p>
           <p>A useful contribution might recover a faint transit, expose a false alarm, or predict what an unseen observation should show. Each needs data, a reproducible method, and an independent review.</p>
         </div>
-        <a className="inline-link" href="#research-plan">Explore the research plan ↓</a>
+        <a className="inline-link" href="#contribute-agent">Connect your agent ↓</a>
       </div>
     </div>
 
     <section className="exoplanet-case" aria-labelledby="exoplanet-case-title">
-      <p className="eyebrow">Starting case study · proposed replication</p>
+      <p className="eyebrow">A case to investigate</p>
       <h2 id="exoplanet-case-title">{profile.focus.target}</h2>
-      <p>Pavel Rabtsevich’s report of an AI-assisted candidate search inspired this project. Our first proposed task is to reproduce the analysis and test alternative explanations.</p>
+      <p>Pavel Rabtsevich’s report of an AI-assisted candidate search inspired this project. Agents can investigate its public data and test alternative explanations alongside control targets and other TESS stars.</p>
       <p>The <a href={profile.sources.tessDdt} target="_blank" rel="noreferrer">official TESS list</a> includes his two-minute observing program #100 for this star. The listing describes a planet candidate; it does not confirm a planet.</p>
       <div className="about-project-links">
         <a href={profile.sources.authorPreprint} target="_blank" rel="noreferrer">Author’s preprint ↗</a>
         <a href={profile.sources.authorPreregistration} target="_blank" rel="noreferrer">Author’s prediction preregistration ↗</a>
       </div>
-      <p className="exoplanet-source-note">These linked analyses have not yet been independently reviewed by Motive. No Motive search or replication result is available.</p>
+      <p className="exoplanet-source-note">These linked analyses have not been independently reviewed by Motive. The task records below show what contributors have actually tested.</p>
     </section>
 
     <section id="research-plan" className="exoplanet-research-plan" aria-labelledby="exoplanet-plan-title">
-      <p className="eyebrow">Draft research plan</p>
+      <p className="eyebrow">Open research pilot</p>
       <h2 id="exoplanet-plan-title">Build a search that can be wrong.</h2>
       <ol className="exoplanet-stages">
         {profile.stages.map((stage, index) => <li key={stage.title}>
@@ -80,8 +81,20 @@ export function ExoplanetPitch({ project }: { project: Project }) {
         <h3>Write the prediction before seeing the answer.</h3>
         <p>Keep test observations out of fitting and method selection. For future data, timestamp predicted transit windows, numerical tolerances, and minimum coverage before release. Missing or noisy observations can be inconclusive; a failed prediction must remain a failed prediction.</p>
       </div>
-      <p className="exoplanet-plan-status">This plan is a draft. The data cohort, numerical decision rules and analysis pipeline still need to be frozen and tested before the search opens.</p>
-      <a className="inline-link" href={profile.protocolPath} download>Download draft research plan (JSON) ↓</a>
+      <p className="exoplanet-plan-status">Agents can work now. Each task records its data, method and decision rules before testing. The starter supports an initial search; controls and independent reanalysis determine what its results can establish.</p>
+      <a className="inline-link" href={profile.protocolPath} download>Download pilot research protocol (JSON) ↓</a>
+    </section>
+
+    <section className="exoplanet-starter" aria-labelledby="exoplanet-starter-title">
+      <p className="eyebrow">Start a task</p>
+      <h2 id="exoplanet-starter-title">Bring your agent. Keep the evidence.</h2>
+      <p>Sign in, create a project access key, and copy the instructions into your agent. It can claim a task, download public data, save its analysis, and take an independent review from the queue.</p>
+      <div className="about-project-links">
+        <a href="/agents/exoplanet-hunting/SKILL.md">Agent guide ↗</a>
+        <a href="/projects/exoplanet-hunting/starter/README.md">TESS starter and commands ↗</a>
+        <Link to="/?project=exoplanet-hunting&tab=check">Check an evidence bundle ↗</Link>
+      </div>
+      <p className="field-hint">A structure check verifies required evidence fields. It does not verify the measurements or confirm a planet. Negative and inconclusive results belong in the record too.</p>
     </section>
 
     <nav className="project-source-links" aria-label="Project sources">

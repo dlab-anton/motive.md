@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://motive-md.vercel.app/projects/exoplanet-hunting/evidence.schema.json",
+  "title": "Motive exoplanet evidence bundle v1",
+  "description": "Agent assertions for structural intake only. Passing this schema or the runtime checker does not validate measurements, detect a planet, confer candidate status, or assign a scientific score. The runtime checker also rejects duplicate JSON keys and requires a synthetic urn digest to equal its sha256 field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "protocolVersion", "dataKind", "target", "taskKind", "inputs", "method", "observations", "diagnostics", "controlResults", "limitations", "summary", "nextSteps"],
+  "properties": {
+    "format": { "const": "motive.exoplanet.evidence.v1" },
+    "protocolVersion": { "const": "motive.exoplanet-hunting.pilot.v1" },
+    "dataKind": { "enum": ["observational", "synthetic"] },
+    "target": {
+      "type": "object", "additionalProperties": false, "required": ["ticId"],
+      "properties": { "ticId": { "type": "string", "pattern": "^[1-9][0-9]{0,11}$" } }
+    },
+    "taskKind": { "enum": ["data-audit", "control-recovery", "transit-search", "false-positive-review", "replication"] },
+    "inputs": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/$defs/input" } },
+    "method": {
+      "type": "object", "additionalProperties": false,
+      "required": ["code", "commands", "detrending", "search"],
+      "properties": {
+        "code": {
+          "type": "object", "additionalProperties": false, "required": ["name", "version"],
+          "properties": {
+            "name": { "$ref": "#/$defs/shortText" },
+            "version": { "$ref": "#/$defs/shortText" },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "commands": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/$defs/text" } },
+        "detrending": { "$ref": "#/$defs/text" },
+        "search": { "$ref": "#/$defs/text" }
+      }
+    },
+    "observations": {
+      "type": "object", "additionalProperties": false, "required": ["classification", "events"],
+      "properties": {
+        "classification": { "enum": ["candidate", "no-signal", "false-positive", "inconclusive"] },
+        "events": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/event" } }
+      },
+      "if": { "properties": { "classification": { "const": "candidate" } }, "required": ["classification"] },
+      "then": { "properties": { "events": { "minItems": 1 } } }
+    },
+    "orbitalFit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["periodDays", "periodUncertaintyDays", "epochBjdTdb", "epochUncertaintyDays", "depthPpm", "depthUncertaintyPpm"],
+      "properties": {
+        "periodDays": { "type": "number", "exclusiveMinimum": 0 },
+        "periodUncertaintyDays": { "type": "number", "minimum": 0 },
+        "epochBjdTdb": { "type": "number", "exclusiveMinimum": 0 },
+        "epochUncertaintyDays": { "type": "number", "minimum": 0 },
+        "depthPpm": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "depthUncertaintyPpm": { "type": "number", "minimum": 0 }
+      }
+    },
+    "diagnostics": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/finding" } },
+    "controlResults": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/finding" } },
+    "limitations": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/$defs/text" } },
+    "summary": { "$ref": "#/$defs/text" },
+    "nextSteps": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/$defs/text" } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "dataKind": { "const": "synthetic" } }, "required": ["dataKind"] },
+      "then": {
+        "properties": {
+          "inputs": { "items": { "properties": { "uri": { "pattern": "^urn:sha256:[0-9a-f]{64}$" } } } },
+          "observations": { "properties": { "classification": { "enum": ["no-signal", "inconclusive"] } } }
+        }
+      },
+      "else": { "properties": { "inputs": { "items": { "properties": { "uri": { "pattern": "^(https://|mast:)" } } } } } }
+    }
+  ],
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 2048, "pattern": "\\S" },
+    "shortText": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "\\S" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "input": {
+      "type": "object", "additionalProperties": false,
+      "required": ["uri", "sha256", "sector", "timeSystem", "fluxProvenance"],
+      "properties": {
+        "uri": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "sector": { "type": "integer", "minimum": 1 },
+        "timeSystem": { "const": "BJD_TDB" },
+        "fluxProvenance": { "$ref": "#/$defs/text" }
+      }
+    },
+    "event": {
+      "type": "object", "additionalProperties": false,
+      "required": ["epochBjdTdb", "depthPpm", "durationHours"],
+      "properties": {
+        "epochBjdTdb": { "type": "number", "exclusiveMinimum": 0 },
+        "depthPpm": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "durationHours": { "type": "number", "exclusiveMinimum": 0 },
+        "uncertaintyPpm": { "type": "number", "minimum": 0 }
+      }
+    },
+    "finding": {
+      "type": "object", "additionalProperties": false, "required": ["name", "status", "notes"],
+      "properties": {
+        "name": { "$ref": "#/$defs/shortText" },
+        "status": { "enum": ["pass", "fail", "inconclusive", "not-run"] },
+        "notes": { "$ref": "#/$defs/text" }
+      }
+    }
+  }
+}

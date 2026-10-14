@@ -11,10 +11,12 @@ import { checkCirclePackingWitness, type CirclePackingCheck } from '../../src/li
 import { compareCirclePackingWitnesses } from '../../src/lib/circle-packing-equivalence.ts';
 import { checkMatmulWitness, MATMUL_4X4X4_PROFILE, MATMUL_4X4X4_REFERENCE_RANK, MATMUL_MAX_ABS_COEFFICIENT,
   MATMUL_WITNESS_FORMAT, type MatmulCheck } from '../../src/lib/matmul.ts';
+import { checkExoplanetEvidence, EXOPLANET_EVIDENCE_FORMAT, EXOPLANET_MAX_BYTES,
+  type ExoplanetCheck } from '../../src/lib/exoplanet.ts';
 
 export type CheckedWitnessOutcome =
-  | { ok: true; exactScore: string; exceedsReference: boolean; result: CirclePackingCheck | MatmulCheck }
-  | { ok: false; result: CirclePackingCheck | MatmulCheck };
+  | { ok: true; exactScore: string | null; exceedsReference: boolean | null; result: CirclePackingCheck | MatmulCheck | ExoplanetCheck }
+  | { ok: false; result: CirclePackingCheck | MatmulCheck | ExoplanetCheck };
 
 export type ParticipationProjectProfile = {
   slug: string;
@@ -26,7 +28,7 @@ export type ParticipationProjectProfile = {
   referenceCommit: string;
   referenceWitnessDigest: string;
   /** Whether a larger or a smaller exact score is better. */
-  objectiveDirection: 'MAXIMIZE' | 'MINIMIZE';
+  objectiveDirection: 'MAXIMIZE' | 'MINIMIZE' | 'NONE';
   checker: { format: string; version: number; sourceDigest: string };
   witnessFormat: string;
   /** Hard cap enforced by the service and by the artifact table's byte constraint. */
@@ -115,8 +117,43 @@ export const MATMUL_4X4X4_PARTICIPATION_PROFILE: ParticipationProjectProfile = O
   },
 });
 
+// Pilot input identity. Advance the work-order revision when this public plan changes.
+const EXOPLANET_PILOT_PROTOCOL_SHA256 = '715c23084375419c2f58ccb50516f5c37c2a1d425ffb4623653c16dfe5d94b07';
+const EXOPLANET_CHECKER_SOURCE_DIGEST = 'sha256:1dbb12d1f1276840b94189c3be5897ad6f0834a1bddb0d9eae9f4b51ff1dc2c2';
+
+export const EXOPLANET_HUNTING_PARTICIPATION_PROFILE: ParticipationProjectProfile = Object.freeze({
+  slug: 'exoplanet-hunting',
+  unavailableMessage: 'The public exoplanet-hunting project is unavailable.',
+  workOrderKey: 'exoplanet-hunting-external',
+  workOrderRevision: 1,
+  agreementId: 'exoplanet-hunting-external-v1',
+  referenceCommit: EXOPLANET_PILOT_PROTOCOL_SHA256,
+  referenceWitnessDigest: `sha256:${EXOPLANET_PILOT_PROTOCOL_SHA256}`,
+  objectiveDirection: 'NONE',
+  checker: Object.freeze({ format: 'motive.exoplanet.evidence-check.v1', version: 1,
+    sourceDigest: EXOPLANET_CHECKER_SOURCE_DIGEST }),
+  witnessFormat: EXOPLANET_EVIDENCE_FORMAT,
+  maximumWitnessBytes: EXOPLANET_MAX_BYTES,
+  licenseRef: 'exoplanet-evidence-terms-v1',
+  allowedEffects: Object.freeze(['submit-data-only-exoplanet-evidence']),
+  workOrderObjective: 'Record one bounded, reproducible analysis of public TESS data or a control. Retain provenance, null and inconclusive outcomes, and independent review. Structural acceptance does not validate or confirm a planet.',
+  artifactManifestFormat: 'motive.external-exoplanet-artifact/0.1',
+  reportFormat: 'motive.exoplanet.checked-evidence.v1',
+  evaluationProfile: Object.freeze({ format: 'motive.exoplanet.evidence-check.v1', version: 1,
+    sourceDigest: EXOPLANET_CHECKER_SOURCE_DIGEST, witnessFormat: EXOPLANET_EVIDENCE_FORMAT,
+    maximumBytes: EXOPLANET_MAX_BYTES, protocolDigest: `sha256:${EXOPLANET_PILOT_PROTOCOL_SHA256}`,
+    scope: 'structure-only', provenanceStatus: 'DECLARED_NOT_VERIFIED', scientificStatus: 'NOT_VALIDATED' }),
+  check: witness => {
+    const checked = checkExoplanetEvidence(witness);
+    return checked.ok
+      ? { ok: true, exactScore: null, exceedsReference: null, result: checked }
+      : { ok: false, result: checked };
+  },
+});
+
 /** Projects the participation loop can serve besides the default circle-packing project. */
-export const ADDITIONAL_PARTICIPATION_PROFILES: readonly ParticipationProjectProfile[] = Object.freeze([MATMUL_4X4X4_PARTICIPATION_PROFILE]);
+export const ADDITIONAL_PARTICIPATION_PROFILES: readonly ParticipationProjectProfile[] = Object.freeze([
+  MATMUL_4X4X4_PARTICIPATION_PROFILE, EXOPLANET_HUNTING_PARTICIPATION_PROFILE]);
 
 export const PARTICIPATION_PROFILES: readonly ParticipationProjectProfile[] = Object.freeze([
   CIRCLE_PACKING_PARTICIPATION_PROFILE, ...ADDITIONAL_PARTICIPATION_PROFILES]);
