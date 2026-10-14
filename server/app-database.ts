@@ -5,6 +5,15 @@ import { getPostgresSchemaStatus, postgresPoolConfigFromEnvironment, type Postgr
 export const APPLICATION_DATABASE_IDLE_ERROR = 'APPLICATION_DATABASE_IDLE_CONNECTION_FAILED';
 const OPTIONAL_MCP_MIGRATION = '047_mcp_oauth.sql';
 const MEMORY_RECOVERY_MIGRATION = '048_legacy_agent_memory_recovery.sql';
+// The production schema may advance before the bridge deployment. These are the
+// frozen SQL checksums from the Astronomy migration review, not an open-ended
+// permission to accept later migrations.
+const ASTRONOMY_EVIDENCE_MIGRATION = '050_exoplanet_evidence.sql';
+const ASTRONOMY_REVIEW_MIGRATION = '051_exoplanet_finding_review.sql';
+const ASTRONOMY_FORWARD_CHECKSUMS = {
+  [ASTRONOMY_EVIDENCE_MIGRATION]: 'sha256:7b50e0a612753f4b86a10c2a5f8d83404c8ca5fba894831fa3e907770d907e2b',
+  [ASTRONOMY_REVIEW_MIGRATION]: 'sha256:f406a41c6ad2f3040dda27cef782c77d094b0703d70ef82d7247a851ed5ebee9',
+} as const;
 
 /**
  * Deploy additive feature code before its tables, without relaxing accounting
@@ -12,8 +21,30 @@ const MEMORY_RECOVERY_MIGRATION = '048_legacy_agent_memory_recovery.sql';
  * After migration, retain a deployment that recognizes the new schema.
  */
 export function applicationSchemaCanStart(schema: PostgresSchemaStatus): boolean {
-  if (schema.exact) return true;
-  return soleMissingMigration(schema, OPTIONAL_MCP_MIGRATION) || memoryRecoveryMigrationPending(schema);
+  if (schema.exact) return schema.problems.length === 0 && matchingMigrationRows(schema);
+  return soleMissingMigration(schema, OPTIONAL_MCP_MIGRATION)
+    || memoryRecoveryMigrationPending(schema)
+    || recognizedAstronomyForwardSchema(schema);
+}
+
+/** Only the frozen 050 prefix, optionally followed by 051, may be ahead of this deployment. */
+function recognizedAstronomyForwardSchema(schema: PostgresSchemaStatus): boolean {
+  if (schema.expected.some(row => row.name === ASTRONOMY_EVIDENCE_MIGRATION || row.name === ASTRONOMY_REVIEW_MIGRATION)) return false;
+  const extras = schema.applied.filter(row => row.name === ASTRONOMY_EVIDENCE_MIGRATION || row.name === ASTRONOMY_REVIEW_MIGRATION);
+  if (!extras.some(row => row.name === ASTRONOMY_EVIDENCE_MIGRATION)) return false;
+  if (schema.problems.length !== extras.length || extras.some(row =>
+    row.checksum !== ASTRONOMY_FORWARD_CHECKSUMS[row.name as keyof typeof ASTRONOMY_FORWARD_CHECKSUMS]
+      || !schema.problems.includes(`Unsupported applied migration ${row.name}.`))) return false;
+  return matchingMigrationRows(schema, new Set(extras.map(row => row.name)));
+}
+
+function matchingMigrationRows(schema: PostgresSchemaStatus, allowedExtra = new Set<string>()): boolean {
+  const expected = new Map(schema.expected.map(row => [row.name, row.checksum]));
+  const applied = new Map(schema.applied.map(row => [row.name, row.checksum]));
+  if (expected.size !== schema.expected.length || applied.size !== schema.applied.length
+    || applied.size !== expected.size + allowedExtra.size) return false;
+  return schema.expected.every(row => applied.get(row.name) === row.checksum)
+    && schema.applied.every(row => expected.has(row.name) || allowedExtra.has(row.name));
 }
 
 /** Recovery routes remain closed until their tables exist; existing MCP stays available. */

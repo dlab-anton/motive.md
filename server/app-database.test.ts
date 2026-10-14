@@ -1,4 +1,6 @@
 import { EventEmitter } from 'node:events';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getPostgresSchemaStatus, type PostgresSchemaStatus } from '../packages/accounting/src/migrations.ts';
 import { createMcpSchemaReadiness } from './mcp/readiness.ts';
@@ -28,6 +30,70 @@ function exactMcpSchema(): PostgresSchemaStatus {
   const schema = missingMcpSchema();
   return { ...schema, applied: schema.expected, exact: true, problems: [] };
 }
+
+const astronomy = [
+  { name: '050_exoplanet_evidence.sql', checksum: 'sha256:7b50e0a612753f4b86a10c2a5f8d83404c8ca5fba894831fa3e907770d907e2b' },
+  { name: '051_exoplanet_finding_review.sql', checksum: 'sha256:f406a41c6ad2f3040dda27cef782c77d094b0703d70ef82d7247a851ed5ebee9' },
+] as const;
+
+function bridgeSchema(appliedExtras: readonly { name: string; checksum: string }[]): PostgresSchemaStatus {
+  const prior = exactMcpSchema();
+  return {
+    expected: prior.expected,
+    applied: [...prior.applied, ...appliedExtras],
+    exact: false,
+    problems: appliedExtras.map(row => `Unsupported applied migration ${row.name}.`),
+  };
+}
+
+describe('frozen Astronomy forward-schema bridge', () => {
+  it('pins the exact hashes of reviewed 050 and 051 SQL when those files are in this checkout', () => {
+    // The deployment bridge copies only app-database.ts and this test into the
+    // old source checkout, which does not yet contain the Astronomy SQL files.
+    const paths = astronomy.map(row => new URL(`../migrations/${row.name}`, import.meta.url));
+    if (!paths.every(path => existsSync(path))) return;
+    for (const [index, path] of paths.entries()) {
+      const sql = readFileSync(path, 'utf8');
+      expect(`sha256:${createHash('sha256').update(sql).digest('hex')}`).toBe(astronomy[index].checksum);
+    }
+  });
+
+  it('starts old source on its original exact schema, on 050 alone, and on 050 then 051', () => {
+    expect(applicationSchemaCanStart(exactMcpSchema())).toBe(true);
+    expect(applicationSchemaCanStart(bridgeSchema([astronomy[0]]))).toBe(true);
+    expect(applicationSchemaCanStart(bridgeSchema(astronomy))).toBe(true);
+    const final = bridgeSchema(astronomy);
+    expect(applicationSchemaCanStart({ ...final, expected: final.applied, exact: true, problems: [] })).toBe(true);
+  });
+
+  it('rejects 051 without 050, changed SQL checksums, and any unknown later migration', () => {
+    expect(applicationSchemaCanStart(bridgeSchema([astronomy[1]]))).toBe(false);
+    expect(applicationSchemaCanStart(bridgeSchema([{ ...astronomy[0], checksum: `sha256:${'0'.repeat(64)}` }]))).toBe(false);
+    expect(applicationSchemaCanStart(bridgeSchema([astronomy[0], { ...astronomy[1], checksum: `sha256:${'0'.repeat(64)}` }]))).toBe(false);
+    expect(applicationSchemaCanStart(bridgeSchema([astronomy[0], { name: '052_future.sql', checksum: 'sha256:future' }]))).toBe(false);
+  });
+
+  it('rejects missing or altered old migrations, duplicate rows, and contradictory problems', () => {
+    const valid = bridgeSchema(astronomy);
+    expect(applicationSchemaCanStart({ ...valid, applied: valid.applied.filter(row => row.name !== '047_mcp_oauth.sql'),
+      problems: [...valid.problems, 'Missing migration 047_mcp_oauth.sql.'] })).toBe(false);
+    expect(applicationSchemaCanStart({ ...valid, expected: [{ name: '001_base.sql', checksum: 'changed' }, valid.expected[1]] })).toBe(false);
+    expect(applicationSchemaCanStart({ ...valid, applied: [...valid.applied, astronomy[0]],
+      problems: [...valid.problems, `Unsupported applied migration ${astronomy[0].name}.`] })).toBe(false);
+    expect(applicationSchemaCanStart({ ...valid, expected: [...valid.expected, valid.expected[0]] })).toBe(false);
+    expect(applicationSchemaCanStart({ ...valid, problems: [valid.problems[0]] })).toBe(false);
+    expect(applicationSchemaCanStart({ ...valid, exact: true })).toBe(false);
+    expect(applicationSchemaCanStart({ ...exactMcpSchema(), applied: bridgeSchema([astronomy[0]]).applied })).toBe(false);
+  });
+
+  it('does not treat expected 050 or 051 as optional pending migrations', () => {
+    const old = exactMcpSchema();
+    for (const pending of [astronomy[0], astronomy[1]]) {
+      expect(applicationSchemaCanStart({ expected: [...old.expected, pending], applied: old.applied,
+        exact: false, problems: [`Missing migration ${pending.name}.`] })).toBe(false);
+    }
+  });
+});
 
 describe('bounded additive MCP schema rollout', () => {
   it('keeps existing MCP available while only the recovery migration is pending', async () => {
