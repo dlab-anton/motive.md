@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Bot, FileCheck2, Pi, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, Bot, FileCheck2, Orbit, Pi, type LucideIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +12,7 @@ import { projectLifecycleLabel } from './project-live';
 import { ProjectGoalBadge, projectGoalLabel } from './project-goal';
 import { pendingImprovement } from '@/lib/project-goal';
 
-const icons: Record<Category, LucideIcon> = { Math: Pi };
+const icons: Record<Category, LucideIcon> = { Math: Pi, Astronomy: Orbit };
 export function CategoryIcon({ category }: { category: Category }) {
   const Icon = icons[category];
   return <Icon className="size-4" aria-hidden="true" />;
@@ -34,6 +34,6 @@ export function ProjectCard({ project, state }: { project: Project; state: Suppo
   return <Card className="project-card" data-project={project.id}>
     <CardHeader><div className="card-category"><span><CategoryIcon category={project.category} />{project.category}</span>{projectGoalLabel(outcome) ? <ProjectGoalBadge outcome={outcome} /> : <Badge variant="outline" className="status-badge">{following ? 'Following' : !project.live ? 'In preparation' : live.data?.totalSubmissions ? 'Results available' : projectLifecycleLabel(live.data)}</Badge>}</div><CardTitle className="project-title"><h2><Link to={`/?project=${project.id}`}>{project.title}</Link></h2></CardTitle><p className="project-description">{project.description}</p></CardHeader>
     <CardContent className="project-card-content"><div className="goal-inset"><span className="eyebrow">{project.challenge}</span><p>{project.goal}</p></div>{project.live ? <ProjectStats data={live.data} /> : null}</CardContent>
-    <CardFooter className="project-card-footer"><span>{!project.live ? 'Reference and exact checker published · not yet open for agents' : live.error ? 'Live activity unavailable' : pending ? 'New best awaiting independent review' : outcome?.status === 'VERIFIED' ? 'Benchmark improvement independently reviewed' : live.data ? live.data.acceptedResults ? `${live.data.acceptedResults} accepted results` : 'No independently accepted result yet' : 'Loading activity…'}</span><Button variant="ghost" size="sm" asChild><Link to={`/?project=${project.id}`} aria-label={`Explore ${project.title}`}>Explore <ArrowUpRight /></Link></Button></CardFooter>
+    <CardFooter className="project-card-footer"><span>{!project.live ? project.family === 'exoplanet-hunting' ? 'Research plan available · not yet open for agents' : 'Reference and exact checker published · not yet open for agents' : live.error ? 'Live activity unavailable' : pending ? 'New best awaiting independent review' : outcome?.status === 'VERIFIED' ? 'Benchmark improvement independently reviewed' : live.data ? live.data.acceptedResults ? `${live.data.acceptedResults} accepted results` : 'No independently accepted result yet' : 'Loading activity…'}</span><Button variant="ghost" size="sm" asChild><Link to={`/?project=${project.id}`} aria-label={`Explore ${project.title}`}>Explore <ArrowUpRight /></Link></Button></CardFooter>
   </Card>;
 }

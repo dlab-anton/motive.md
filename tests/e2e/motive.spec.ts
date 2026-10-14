@@ -10,7 +10,7 @@ test('shows one real public project without legacy balances or sample activity',
 
   await page.goto('/');
   await expect(page).toHaveTitle(/motive\.md/);
-  await expect(page.locator('[data-project]')).toHaveCount(2);
+  await expect(page.locator('[data-project]')).toHaveCount(3);
   const project = page.locator('[data-project="circle-packing"]');
   await expect(project).toContainText('Find a better circle packing');
   await expect(project).toContainText('Open for contributions');

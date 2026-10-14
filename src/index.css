@@ -654,6 +654,50 @@ a:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-ra
 .project-context-table caption { text-align:left; font-size:11px; color:var(--muted-foreground); padding-bottom:8px; }
 .project-context-table th, .project-context-table td { text-align:left; padding:7px 10px 7px 0; border-bottom:1px solid var(--border); vertical-align:top; }
 .project-context-table th { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted-foreground); font-weight:550; }
+.transit-illustration { margin:0; padding:17px; border:1px solid var(--border); border-radius:10px; background:var(--card); }
+.transit-figure-label { display:flex; justify-content:space-between; gap:10px; color:var(--muted-foreground); font-size:10px; }
+.transit-figure-label > :last-child { text-transform:uppercase; letter-spacing:.06em; font-size:9px; }
+.transit-illustration > svg { display:block; width:100%; height:auto; margin:8px 0; overflow:visible; }
+.transit-orbit, .transit-orbit-front { fill:none; stroke:var(--border); stroke-width:1.5; }
+.transit-orbit-front { stroke:var(--muted-foreground); stroke-dasharray:3 5; opacity:.5; }
+.transit-star-halo { fill:var(--secondary); }
+.transit-star { fill:var(--primary); opacity:.75; }
+.transit-planet { fill:var(--foreground); stroke:var(--card); stroke-width:2; }
+.transit-chart-label { font-size:12px; fill:var(--muted-foreground); }
+.transit-unseen { font-size:25px; fill:var(--muted-foreground); }
+.transit-guide, .transit-axis, .transit-baseline { fill:none; stroke:var(--border); stroke-width:1; }
+.transit-baseline { stroke-dasharray:3 5; }
+.transit-future { fill:var(--muted); }
+.transit-observed { fill:none; stroke:var(--primary); stroke-width:2.5; stroke-linecap:round; }
+.transit-prediction-window { fill:var(--secondary); stroke:var(--primary); stroke-dasharray:3 4; }
+.transit-prediction { fill:none; stroke:var(--primary); stroke-width:2; stroke-dasharray:4 4; }
+.transit-figure-controls { display:flex; flex-wrap:wrap; gap:5px; }
+.transit-figure-controls button { flex:1; min-height:36px; padding:7px 9px; border:1px solid var(--border); border-radius:6px; color:var(--muted-foreground); font-size:11px; cursor:pointer; }
+.transit-figure-controls button[aria-pressed="true"] { color:var(--primary); background:var(--secondary); border-color:var(--primary); }
+.transit-figure-controls button:focus-visible { outline:2px solid var(--ring); outline-offset:3px; }
+.transit-illustration figcaption { margin-top:14px; }
+.transit-illustration figcaption p { min-height:4.8em; margin:0 0 8px; color:var(--foreground); font-size:12px; line-height:1.6; }
+.transit-illustration figcaption small { display:block; color:var(--muted-foreground); font-size:10px; line-height:1.6; }
+.exoplanet-case { margin-top:28px; padding:20px; border:1px solid var(--border); border-radius:10px; }
+.exoplanet-case h2, .exoplanet-research-plan h2 { margin:8px 0 12px; font-size:22px; font-weight:550; letter-spacing:-.5px; }
+.exoplanet-case p, .exoplanet-research-plan p { color:var(--muted-foreground); font-size:13px; line-height:1.8; }
+.exoplanet-case p + p { margin-top:12px; }
+.exoplanet-case .eyebrow, .exoplanet-research-plan > .eyebrow { font-size:10px; }
+.exoplanet-case p a { color:var(--foreground); text-decoration:underline; text-underline-offset:3px; }
+.exoplanet-case .exoplanet-source-note { margin-bottom:0; font-size:11px; }
+.exoplanet-research-plan { margin-top:32px; scroll-margin-top:90px; }
+.exoplanet-stages { list-style:none; margin:18px 0; padding:0; }
+.exoplanet-stages li { display:grid; grid-template-columns:25px minmax(0,1fr); gap:12px; padding:17px 0; border-bottom:1px solid var(--border); }
+.exoplanet-stages li > span { margin-top:3px; color:var(--muted-foreground); font-family:var(--font-mono,monospace); font-size:10px; }
+.exoplanet-stages h3, .exoplanet-prediction-note h3 { margin:0 0 5px; font-size:14px; font-weight:550; }
+.exoplanet-stages p { margin:0; }
+.exoplanet-prediction-note { margin:24px 0 18px; padding-left:16px; border-left:2px solid var(--primary); }
+.exoplanet-prediction-note p { margin:0; }
+.exoplanet-research-plan .exoplanet-plan-status { font-size:12px; }
+.exoplanet-research-plan > .inline-link { display:inline-block; margin-top:10px; font-size:12px; }
+.exoplanet-pitch .project-source-links { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:18px; margin:30px 0 18px; padding:20px 0; border-block:1px solid var(--border); }
+.exoplanet-pitch .project-source-links a { min-width:0; color:var(--foreground); font-size:11px; line-height:1.55; overflow-wrap:anywhere; }
+.exoplanet-pitch .project-source-links a span { display:block; margin-bottom:5px; color:var(--muted-foreground); font-family:var(--font-mono,monospace); font-size:9px; text-transform:uppercase; letter-spacing:.07em; }
 .project-preparation { display:grid; gap:10px; padding:18px; border:1px solid var(--border); border-radius:10px; font-size:13px; }
 .project-preparation h2 { font-size:18px; margin:0; }
 .project-preparation p { margin:0; color:var(--muted-foreground); line-height:1.6; }

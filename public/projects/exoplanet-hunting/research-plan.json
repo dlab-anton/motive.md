@@ -1,0 +1,86 @@
+{
+  "format": "motive.exoplanet-hunting.research-plan.v1",
+  "version": 1,
+  "status": "draft-proposed",
+  "disclaimer": "This is a proposed protocol. It has not been frozen, preregistered by Motive, executed, or independently approved. A signal found under it would be a candidate, not a confirmed planet.",
+  "projectId": "exoplanet-hunting",
+  "startingCase": {
+    "target": "TIC 4206066",
+    "purpose": "Replicate and critically assess the author-reported candidate analysis before any broad search.",
+    "evidenceBoundary": "The TESS DDT listing names a two-minute cadence request for TIC 4206066. It confirms a program listing only; it does not establish a planet, a measurement, or an exact observation schedule. The author-linked preprint and preregistration have not been independently reviewed for this plan."
+  },
+  "sources": [
+    {
+      "name": "MAST TESS archive",
+      "url": "https://archive.stsci.edu/missions-and-data/tess",
+      "role": "Public observation products and metadata"
+    },
+    {
+      "name": "TESS Director's Discretionary Time programs",
+      "url": "https://tess.mit.edu/science/ddt/",
+      "role": "Program listing for TIC 4206066; not evidence of a planet or observation timing"
+    },
+    {
+      "name": "NASA Exoplanet Archive FAQ",
+      "url": "https://exoplanetarchive.ipac.caltech.edu/docs/faq.html",
+      "role": "Terminology and distinctions among candidates and confirmed planets"
+    },
+    {
+      "name": "Author-supplied candidate preprint",
+      "url": "https://doi.org/10.5281/zenodo.22967456",
+      "role": "Replication target; contents not independently reviewed here"
+    },
+    {
+      "name": "Author-supplied preregistration",
+      "url": "https://doi.org/10.5281/zenodo.23175179",
+      "role": "Prior protocol claim to examine; contents not independently reviewed here"
+    }
+  ],
+  "launchGates": [
+    "Freeze and publicly version the data cohort and complete protocol before running the proposed search.",
+    "Demonstrate the pipeline on known-planet and known false-positive controls and on injected transit signals, with predeclared recovery and failure criteria.",
+    "Appoint independent reviewers and approve a project work order that defines scope, resources, and decisions.",
+    "Provide an operational work queue and durable evidence storage for inputs, code, outputs, failures, and reviews."
+  ],
+  "proposedWorkflow": [
+    {
+      "step": "inventory-and-replication",
+      "plan": "Inventory public TESS observations of TIC 4206066 and run a transparent replication of the author-reported candidate analysis. Record discrepancies and alternative explanations without treating the reported parameters as established measurements."
+    },
+    {
+      "step": "controls-and-injections",
+      "plan": "Select known-planet and known false-positive controls independently of this target. Add blinded synthetic transit injections spanning the proposed search domain. Measure recovery, mistaken detections, parameter error, and sensitivity to data gaps and noise before fixing pass/fail criteria."
+    },
+    {
+      "step": "freeze-search",
+      "plan": "Freeze target and sector selection, public product versions, exclusion rules, quality masks, detrending, search grid, detection statistic, multiple-trial correction, and diagnostic decision rules before scanning the eligible cohort. Version every amendment and keep earlier results."
+    },
+    {
+      "step": "fit-blind-validation",
+      "plan": "Define sector-level holdouts before model fitting or tuning. Fit only on the training sectors, lock the model and tolerances, and evaluate held-out sectors without retuning. Previously examined data cannot be made prospective by hiding them afterward."
+    },
+    {
+      "step": "false-positive-review",
+      "plan": "Check odd/even transit depths and timing, secondary eclipses, contamination and nearby sources, centroid and pixel-level location, instrumental cadence or spacecraft aliases, and stellar rotation or variability. Preserve contradictory and inconclusive diagnostics."
+    },
+    {
+      "step": "prospective-prediction",
+      "plan": "If future unreleased data offer a genuine prospective test, publish timestamped predicted transit windows, numerical tolerances, and minimum coverage and quality requirements before release. Score the locked predictions after release with no retuning."
+    },
+    {
+      "step": "independent-review",
+      "plan": "Give an independent reviewer read-only access to the frozen inputs and code for reanalysis. Record a separate novelty assessment against dated catalog snapshots. Report candidate, validated, or confirmed status only at the evidentiary level actually supported."
+    }
+  ],
+  "provenanceRequirements": {
+    "observations": "Archive exact MAST/TESS public product identifiers, release and retrieval timestamps, source URLs, file checksums, sector, camera and CCD where available, cadence, quality flags and masks, flux choice, and time convention with BJD_TDB values and units. Preserve raw files or durable retrieval references.",
+    "analysis": "Record code version, dependency lockfile, configuration, random seeds, preprocessing decisions, search grid, trial correction, model fits, plots, and machine-readable diagnostic results.",
+    "catalogs": "Date and archive catalog snapshots used for known controls, source contamination, and novelty checks. Keep catalog novelty separate from transit validation.",
+    "outcomes": "Retain every eligible target and trial outcome, including failures, null results, and inconclusive cases, along with reviewer decisions and protocol amendments."
+  },
+  "decisionRules": {
+    "currentState": "No numerical pass/fail thresholds have been selected or frozen. Set them using controls and injection recovery before search execution; preserve the selected values in the frozen protocol.",
+    "classification": "A detected periodic dip is a signal or planet candidate. Independent validation and confirmation need their own evidence and review; the number of detections alone never confirms planets.",
+    "failureAndInconclusive": "A failed diagnostic or insufficient coverage must remain visible and cannot be converted to success by post-hoc selection. Inconclusive results stay inconclusive until a new, versioned test supplies evidence."
+  }
+}

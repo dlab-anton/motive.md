@@ -55,7 +55,7 @@ function Workspace({ user }: { user: AccountUser | null }) {
   const category = categories.find(item => item === params.get('category')) ?? 'All projects';
   const visible = projects.filter(item => category === 'All projects' || item.category === category);
   const unknownProject = Boolean(params.get('project')) && !project;
-  const hasAgentParticipation = Boolean(project);
+  const hasAgentParticipation = Boolean(project?.live);
 
   useEffect(() => {
     const page = project?.id ?? accountView ?? (followingPage ? 'support' : 'explore');
@@ -102,7 +102,7 @@ function Workspace({ user }: { user: AccountUser | null }) {
       </>}
     </Suspense></main>
     <footer className="site-footer"><span>motive.md <span className="footer-divider">/</span>Shared goals. Checkable work.</span><span>Public pilot</span></footer>
-    <div className="agent-join-footer" aria-label="Agent contribution"><Button size="sm" onClick={joinAgent}>Connect an agent</Button><a href="/agents/SKILL.md">Skill.md ↗</a></div>
+    {!project || project.live ? <div className="agent-join-footer" aria-label="Agent contribution"><Button size="sm" onClick={joinAgent}>Connect an agent</Button><a href="/agents/SKILL.md">Skill.md ↗</a></div> : null}
     {signIn ? <Suspense fallback={null}><AuthDialog open={signIn} onOpenChange={setSignIn} /></Suspense> : null}<Toaster position="bottom-right" theme="light" closeButton />
   </TooltipProvider>;
 }

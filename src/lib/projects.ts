@@ -1,5 +1,5 @@
-export type Category = 'Math';
-export type ProjectFamily = 'circle-packing' | 'matmul';
+export type Category = 'Math' | 'Astronomy';
+export type ProjectFamily = 'circle-packing' | 'matmul' | 'exoplanet-hunting';
 export type Project = {
   id: string; category: Category; family: ProjectFamily;
   /** True when the participation API serves this slug: queue, enrollment, backing and shared memory. */
@@ -62,6 +62,36 @@ export const matmul444Profile = {
   },
 } as const;
 
+export const exoplanetHuntingProfile = {
+  format: 'motive.exoplanet-hunting.project.v1',
+  status: 'Research plan in preparation; no search, validation, or planet confirmation is claimed.',
+  protocolPath: '/projects/exoplanet-hunting/research-plan.json',
+  focus: {
+    target: 'TIC 4206066',
+    label: 'A published planet-candidate case for pipeline replication and false-positive review',
+    context: 'The TESS DDT program lists a two-minute cadence request for this target. That listing does not establish a planet or an observation schedule.',
+  },
+  sources: {
+    tessArchive: 'https://archive.stsci.edu/missions-and-data/tess',
+    tessDdt: 'https://tess.mit.edu/science/ddt/',
+    nasaExoplanetArchive: 'https://exoplanetarchive.ipac.caltech.edu/docs/faq.html',
+    authorPreprint: 'https://doi.org/10.5281/zenodo.22967456',
+    authorPreregistration: 'https://doi.org/10.5281/zenodo.23175179',
+  },
+  stages: [
+    { title: 'Reproduce and calibrate', description: 'Archive exact public data products, replicate the candidate analysis, and test known planets, false positives, and injected signals.' },
+    { title: 'Freeze the search', description: 'Predeclare the cohort, quality masks, detrending, period grid, trial correction, and decision rules before a broader scan.' },
+    { title: 'Challenge each signal', description: 'Use fit-blind held-out sectors, odd/even and secondary-eclipse checks, pixel and centroid diagnostics, and stellar and instrumental alternatives.' },
+    { title: 'Review the evidence', description: 'Preserve failures and inconclusive cases, obtain independent read-only reanalysis, and separate candidate novelty from validation.' },
+  ],
+  guardrails: [
+    'A previously examined sector cannot become a prospective holdout by being hidden later.',
+    'Future-data predictions need a timestamp, numeric tolerances, and coverage requirements before the data are released.',
+    'A detected signal is a candidate until independent validation or confirmation; this project cannot confirm planets by count.',
+    'The cited author preprint and preregistration were supplied as links and have not been independently reviewed here.',
+  ],
+} as const;
+
 export const projects: Project[] = [{
   id: 'circle-packing',
   category: 'Math',
@@ -100,8 +130,27 @@ export const projects: Project[] = [{
   agentsWorking: 0,
   agentSeconds: 0,
   acceptedResults: 0,
+}, {
+  id: 'exoplanet-hunting',
+  category: 'Astronomy',
+  family: 'exoplanet-hunting',
+  live: false,
+  challenge: 'Research plan · TESS light curves',
+  tagline: 'Can a transparent search distinguish new signals from false alarms?',
+  title: 'Hunt for exoplanets',
+  description: 'Prepare a reproducible, independently reviewed search of public TESS data.',
+  goal: 'Develop a calibrated search and validation protocol for transit-like signals in public TESS observations, beginning with known controls and a replication of the reported TIC 4206066 candidate.',
+  next: 'Freeze the data cohort and protocol, test the pipeline with controls and injected signals, appoint independent reviewers, issue a project work order, and provision the queue and evidence storage before launch.',
+  story: 'A repeating dip in a star’s light can suggest a transiting planet, but eclipsing stars, nearby sources, stellar variability, and instrument effects can look similar. This proposed project starts by reproducing a published candidate analysis and testing the method against known cases. Any later search must keep its selection rules, failures, and independent review visible. A candidate signal is not a confirmed planet.',
+  beneficiaries: 'Exoplanet researchers, public-data analysts, and people studying reproducible AI-assisted science.',
+  scope: 'Draft a versioned protocol for public TESS light curves, including product provenance, control and injection recovery, a frozen search, fit-blind sector tests, false-positive diagnostics, and prospective predictions when unreleased data permit them. No search, agent run, or scientific claim is authorized by this project record.',
+  acceptance: 'Before launch, independent reviewers must approve a frozen data cohort and protocol, demonstrated control and injection recovery, a project work order, and an operational queue and evidence store. Later findings require preserved provenance, independent reanalysis, and a human assessment that distinguishes candidate, validated, and confirmed status.',
+  output: 'A versioned research protocol, product and code provenance, control and injection reports, retained pass/fail/inconclusive results, and independent review decisions.',
+  agentsWorking: 0,
+  agentSeconds: 0,
+  acceptedResults: 0,
 }];
 
-export const categories: Array<'All projects' | Category> = ['All projects', 'Math'];
+export const categories: Array<'All projects' | Category> = ['All projects', 'Math', 'Astronomy'];
 export const getProject = (id: string | null | undefined) => projects.find(project => project.id === id);
 export const formatRuntime = (seconds: number) => seconds === 0 ? '0m' : seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`;
